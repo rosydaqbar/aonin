@@ -12,7 +12,7 @@
     "check:watch": "svelte-kit sync && svelte-check --tsconfig ./tsconfig.json --watch",
     "tauri": "tauri"
   },
-  "license": "MIT",
+  "license": "GPL-3.0-or-later",
   "dependencies": {
     "@fontsource-variable/hanken-grotesk": "^5.3.0",
     "@lucide/svelte": "^1.66.0",

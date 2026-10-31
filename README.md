@@ -80,3 +80,7 @@ Run the tests with `cargo test`.
 - [ ] Recover automatically when the output device is unplugged or reset
 - [ ] Open at login
 - [ ] Signed release builds for Windows and macOS
+
+## License
+
+Aonin is free software, released under the [GNU General Public License v3.0](LICENSE) or (at your option) any later version. You may use, study, share and modify it; if you distribute a modified version, it must stay under the same license with its source available.
