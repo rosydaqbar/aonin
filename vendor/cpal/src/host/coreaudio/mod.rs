@@ -24,6 +24,8 @@ pub use self::ios::{
 };
 #[cfg(target_os = "macos")]
 pub use self::macos::{Host, Stream};
+#[cfg(target_os = "macos")]
+pub(crate) use self::macos::set_force_loopback;
 
 // Common helper methods used by both macOS and iOS
 

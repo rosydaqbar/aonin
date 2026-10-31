@@ -56,6 +56,9 @@ export const actions = {
   async setSend(source: 'system' | 'mic', on: boolean) {
     if (!(await call('set_send', { source, on })) && app.link) app.link.send[source] = on;
   },
+  async setHear(source: 'system' | 'mic', on: boolean) {
+    if (!(await call('set_hear', { source, on })) && app.link) app.link.hear[source] = on;
+  },
   async setDevice(role: 'output' | 'systemSource' | 'mic', name: string) {
     if (!(await call('set_device', { role, name }))) app.devices[role] = name;
   },

@@ -105,6 +105,10 @@ wasm-bindgen = [
     "dep:futures-util",
 ]
 
+[lints.rust]
+# Upstream warning, unrelated to the Aonin patch.
+dead_code = "allow"
+
 [lib]
 name = "cpal"
 path = "src/lib.rs"

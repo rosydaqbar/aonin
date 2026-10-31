@@ -203,6 +203,16 @@ pub mod device_description;
 mod error;
 mod host;
 pub mod platform;
+
+/// Aonin patch: make input streams built on this thread record a device's
+/// *output* through a process tap, even when the device also has inputs
+/// (virtual loopback devices such as BlackHole). Only the tap can leave out
+/// the calling process's own audio. macOS only; a no-op elsewhere.
+pub fn aonin_force_loopback(on: bool) {
+    #[cfg(target_os = "macos")]
+    host::coreaudio::set_force_loopback(on);
+    let _ = on;
+}
 mod sample_format;
 mod timestamp;
 pub mod traits;

@@ -87,6 +87,9 @@ pub fn start_capture(source: Source, name: Option<&str>) -> Result<(Capture, Con
     let config = supported.config();
     let rate = config.sample_rate;
     println!("Capturing {source:?} from \"{device}\" ({} ch, {rate} Hz, {:?})", config.channels, supported.sample_format());
+    // System audio must come through the process tap, which leaves out our
+    // own playback, even when the output is a virtual loopback device.
+    cpal::aonin_force_loopback(matches!(source, Source::System));
 
     // 1 s of headroom; the sender drains it every ~1 ms.
     let (tx, rx) = RingBuffer::new(rate as usize * 2);

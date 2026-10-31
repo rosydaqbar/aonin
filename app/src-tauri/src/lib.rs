@@ -101,6 +101,12 @@ fn set_send(engine: Eng, source: String, on: bool) {
     engine.set_send(if source == "mic" { Source::Mic } else { Source::System }, on);
 }
 
+/// Ask the host to stream its own audio ("system") or mic back to us.
+#[tauri::command]
+fn set_hear(engine: Eng, source: String, on: bool) -> Result<(), String> {
+    engine.set_hear(if source == "mic" { Source::Mic } else { Source::System }, on).map_err(err)
+}
+
 /// Choose a device by name; an empty name follows the system default.
 #[tauri::command]
 fn set_device(app: AppHandle, engine: Eng, role: String, name: String) {
@@ -295,6 +301,7 @@ pub fn run() {
             set_volume,
             set_muted,
             set_send,
+            set_hear,
             set_device,
             set_reconnect
         ])

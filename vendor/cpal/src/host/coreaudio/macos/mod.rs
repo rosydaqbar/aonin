@@ -22,6 +22,19 @@ use crate::{
 
 mod device;
 pub mod enumerate;
+
+thread_local! {
+    /// Aonin patch: see `crate::aonin_force_loopback`.
+    static FORCE_LOOPBACK: std::cell::Cell<bool> = const { std::cell::Cell::new(false) };
+}
+
+pub(crate) fn set_force_loopback(on: bool) {
+    FORCE_LOOPBACK.with(|f| f.set(on));
+}
+
+fn force_loopback() -> bool {
+    FORCE_LOOPBACK.with(|f| f.get())
+}
 mod loopback;
 mod property_listener;
 pub use device::Device;

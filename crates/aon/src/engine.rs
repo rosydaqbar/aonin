@@ -9,10 +9,10 @@ use crate::audio;
 use crate::discovery::{Advert, Discovery};
 use crate::net::{self, HubShared, Identity, SendConfig, SendShared};
 use anyhow::{Result, anyhow};
-use aon_core::protocol::{DEFAULT_PORT, Os, Source};
+use aon_core::protocol::{self, DEFAULT_PORT, Os, Source};
 use serde::Serialize;
 use std::collections::{BTreeMap, HashMap, HashSet};
-use std::net::SocketAddr;
+use std::net::{IpAddr, SocketAddr, UdpSocket};
 use std::sync::atomic::Ordering::Relaxed;
 use std::sync::{Arc, Mutex};
 use std::thread::JoinHandle;
@@ -22,6 +22,9 @@ use std::time::{Duration, Instant};
 const DEGRADED_MS: f32 = 60.0;
 /// No Status from the host for this long means the link is down.
 const LINK_TIMEOUT_MS: u32 = 3_000;
+/// A client re-sends its Want this often; the host drops it after WANT_EXPIRE.
+const WANT_EVERY: Duration = Duration::from_secs(1);
+const WANT_EXPIRE: Duration = Duration::from_secs(3);
 
 struct HostRun {
     shared: Arc<HubShared>,
@@ -29,6 +32,8 @@ struct HostRun {
     error: Arc<Mutex<Option<String>>>,
     /// Output device choice the hub reads on each (re)open.
     output: Arc<Mutex<Option<String>>>,
+    /// Host only: our audio streamed back to clients that asked for it.
+    returns: HashMap<(IpAddr, u64, u16, bool), SendRun>,
 }
 
 struct SendRun {
@@ -45,6 +50,9 @@ struct LinkRun {
     addr: SocketAddr,
     system: Option<SendRun>,
     mic: Option<SendRun>,
+    /// What we asked to hear from the host, and the local hub playing it.
+    hear: Sends,
+    back: Option<HostRun>,
 }
 
 #[derive(Clone, Copy)]
@@ -78,6 +86,10 @@ pub struct Engine {
     prefs: Mutex<Prefs>,
     want_mic: Mutex<bool>,
     started: Instant,
+    /// Sends Want packets to the host (also a keepalive) and reads its acks.
+    ctrl: UdpSocket,
+    last_want: Mutex<Instant>,
+    last_ack: Mutex<Option<Instant>>,
 }
 
 // ---- snapshot: mirrors `AppState` in app/src/lib/state.svelte.ts ----
@@ -151,6 +163,9 @@ struct Link {
     latency_ms: f32,
     send: Sends,
     hear: Sends,
+    /// What comes back from the host: meter level and buffer depth.
+    hear_level: f32,
+    hear_latency_ms: f32,
 }
 
 #[derive(Serialize)]
@@ -183,6 +198,40 @@ struct Options {
     reconnect: bool,
     start_at_login: bool,
     quiet_wifi: bool,
+}
+
+impl Snapshot {
+    /// One line for the CLI: role, peers and stream health.
+    pub fn summary(&self) -> String {
+        let mut parts = Vec::new();
+        if let Some(h) = &self.hosting {
+            let clients: Vec<String> = h
+                .clients
+                .iter()
+                .map(|c| format!("{} {:.1} ms lvl {:.2} rec {}", c.name, c.latency_ms, c.level, c.recovered))
+                .collect();
+            parts.push(format!("hosting on {} [{}]", h.output, clients.join("; ")));
+        }
+        if let Some(l) = &self.link {
+            parts.push(format!(
+                "{} {} {:.1} ms (send sys {} mic {}, hear sys {} mic {}: lvl {:.2}, {:.1} ms)",
+                l.status, l.host.name, l.latency_ms, l.send.system, l.send.mic, l.hear.system, l.hear.mic, l.hear_level, l.hear_latency_ms
+            ));
+        }
+        if self.hosting.is_none() && self.link.is_none() {
+            let hosts: Vec<&str> = self.hosts.iter().map(|h| h.name.as_str()).collect();
+            parts.push(format!("idle, hosts seen: [{}]", hosts.join(", ")));
+        }
+        if let Some(e) = &self.error {
+            parts.push(format!("error: {e}"));
+        }
+        parts.join(" | ")
+    }
+
+    /// Ids and names of the hosts currently visible.
+    pub fn host_ids(&self) -> Vec<(String, String, bool)> {
+        self.hosts.iter().map(|h| (h.id.clone(), h.name.clone(), h.blocked.is_none())).collect()
+    }
 }
 
 fn os_name(os: Os) -> &'static str {
@@ -221,6 +270,13 @@ impl Engine {
             prefs: Mutex::new(prefs),
             want_mic: Mutex::new(false),
             started: Instant::now(),
+            ctrl: {
+                let s = UdpSocket::bind(("0.0.0.0", 0)).expect("bind control socket");
+                s.set_nonblocking(true).expect("nonblocking control socket");
+                s
+            },
+            last_want: Mutex::new(Instant::now()),
+            last_ack: Mutex::new(None),
         })
     }
 
@@ -270,9 +326,14 @@ impl Engine {
 
     pub fn become_host(&self) -> Result<()> {
         let mut host = self.host.lock().unwrap();
-        if host.is_some() {
-            return Ok(());
+        if host.is_none() {
+            *host = Some(self.spawn_hub(DEFAULT_PORT)?);
         }
+        Ok(())
+    }
+
+    /// Start a hub on `port` (0 = any) playing on the chosen output.
+    fn spawn_hub(&self, port: u16) -> Result<HostRun> {
         let shared = Arc::new(HubShared::default());
         let error = Arc::new(Mutex::new(None));
         let output = Arc::new(Mutex::new(self.prefs.lock().unwrap().output.clone()));
@@ -283,20 +344,26 @@ impl Engine {
                 // takes effect; with none chosen, follow the system default.
                 let open = || audio::start_output(o.lock().unwrap().as_deref());
                 let follow = o.lock().unwrap().is_none();
-                net::run_hub(DEFAULT_PORT, open, follow, &s, false)
+                net::run_hub(port, open, follow, &s, false)
             };
             if let Err(err) = run() {
                 *e.lock().unwrap() = Some(format!("Couldn't start hosting: {err}"));
             }
         })?;
-        *host = Some(HostRun { shared, thread, error, output });
-        Ok(())
+        Ok(HostRun { shared, thread, error, output, returns: HashMap::new() })
+    }
+
+    fn stop_hub(h: HostRun) {
+        for (_, r) in h.returns {
+            Self::stop_send(Some(r));
+        }
+        h.shared.stop.store(true, Relaxed);
+        let _ = h.thread.join();
     }
 
     pub fn stop_hosting(&self) {
         if let Some(h) = self.host.lock().unwrap().take() {
-            h.shared.stop.store(true, Relaxed);
-            let _ = h.thread.join();
+            Self::stop_hub(h);
         }
     }
 
@@ -346,6 +413,7 @@ impl Engine {
             return Err(anyhow!("{} already sends its audio to this device.", peer.advert.name));
         }
         self.disconnect();
+        *self.last_ack.lock().unwrap() = None;
         let addr = SocketAddr::new(peer.ip, peer.advert.port);
         let mic = *self.want_mic.lock().unwrap();
         *self.link.lock().unwrap() = Some(LinkRun {
@@ -356,6 +424,8 @@ impl Engine {
             addr,
             system: Some(self.start_send(addr, Source::System)),
             mic: mic.then(|| self.start_send(addr, Source::Mic)),
+            hear: Sends::default(),
+            back: None,
         });
         self.prefs.lock().unwrap().last_host = Some(host);
         Ok(())
@@ -363,8 +433,74 @@ impl Engine {
 
     pub fn disconnect(&self) {
         if let Some(l) = self.link.lock().unwrap().take() {
+            if l.hear.system || l.hear.mic {
+                self.send_want(l.addr, 0, Sends::default());
+            }
             Self::stop_send(l.system);
             Self::stop_send(l.mic);
+            if let Some(b) = l.back {
+                Self::stop_hub(b);
+            }
+        }
+    }
+
+    fn send_want(&self, host: SocketAddr, port: u16, hear: Sends) {
+        let mut buf = Vec::new();
+        protocol::encode_want(&mut buf, self.me.device, port, hear.system, hear.mic);
+        let _ = self.ctrl.send_to(&buf, host);
+    }
+
+    /// Ask the host to stream its own audio and/or mic back to us, played on
+    /// our output through a local hub.
+    pub fn set_hear(&self, source: Source, on: bool) -> Result<()> {
+        let mut link = self.link.lock().unwrap();
+        let Some(l) = link.as_mut() else { return Ok(()) };
+        match source {
+            Source::System => l.hear.system = on,
+            Source::Mic => l.hear.mic = on,
+        }
+        let any = l.hear.system || l.hear.mic;
+        if any && l.back.is_none() {
+            l.back = Some(self.spawn_hub(0)?);
+        }
+        let port = l.back.as_ref().map_or(0, |b| b.shared.port.load(Relaxed));
+        self.send_want(l.addr, port, l.hear);
+        if !any {
+            if let Some(b) = l.back.take() {
+                Self::stop_hub(b);
+            }
+        }
+        Ok(())
+    }
+
+    /// Host side: start or stop the streams back to clients that asked.
+    fn serve_returns(&self, h: &mut HostRun) {
+        let wants = {
+            let mut w = h.shared.wants.lock().unwrap();
+            w.retain(|_, want| want.at.elapsed() < WANT_EXPIRE);
+            w.clone()
+        };
+        let mut needed = HashSet::new();
+        for ((ip, device), w) in &wants {
+            for (on, mic) in [(w.system, false), (w.mic, true)] {
+                if on && w.port != 0 {
+                    needed.insert((*ip, *device, w.port, mic));
+                }
+            }
+        }
+        h.returns.retain(|key, run| {
+            let keep = needed.contains(key);
+            if !keep {
+                run.shared.stop.store(true, Relaxed);
+            }
+            keep
+        });
+        for key in needed {
+            if !h.returns.contains_key(&key) {
+                let (ip, _, port, mic) = key;
+                let source = if mic { Source::Mic } else { Source::System };
+                h.returns.insert(key, self.start_send(SocketAddr::new(ip, port), source));
+            }
         }
     }
 
@@ -430,6 +566,9 @@ impl Engine {
         let mut error = self.disco.error.lock().unwrap().clone().map(|e| format!("Can't look for other devices: {e}"));
         let mut stats = Vec::new();
         let mut output_lost = false;
+        if let Some(h) = self.host.lock().unwrap().as_mut() {
+            self.serve_returns(h);
+        }
         let hosting = {
             let host = self.host.lock().unwrap();
             host.as_ref().map(|h| {
@@ -508,14 +647,34 @@ impl Engine {
             }
         }
 
+        let mut buf = [0u8; 256];
+        while let Ok((n, _)) = self.ctrl.recv_from(&mut buf) {
+            if let Some(protocol::Packet::Status { .. }) = protocol::decode(&buf[..n]) {
+                *self.last_ack.lock().unwrap() = Some(Instant::now());
+            }
+        }
+        if let Some(l) = self.link.lock().unwrap().as_ref() {
+            let mut last = self.last_want.lock().unwrap();
+            if last.elapsed() >= WANT_EVERY {
+                let port = l.back.as_ref().map_or(0, |b| b.shared.port.load(Relaxed));
+                self.send_want(l.addr, port, l.hear);
+                *last = Instant::now();
+            }
+        }
         let link = self.link.lock().unwrap().as_ref().map(|l| {
             let runs = [l.system.as_ref(), l.mic.as_ref()];
-            let alive = runs.iter().flatten().any(|r| {
-                let last = r.shared.last_status_ms.load(Relaxed);
-                last > 0 && (r.started.elapsed().as_millis() as u32).saturating_sub(last) < LINK_TIMEOUT_MS
-            });
+            let acked = self.last_ack.lock().unwrap().is_some_and(|t| t.elapsed() < Duration::from_millis(LINK_TIMEOUT_MS as u64));
+            let alive = acked
+                || runs.iter().flatten().any(|r| {
+                    let last = r.shared.last_status_ms.load(Relaxed);
+                    last > 0 && (r.started.elapsed().as_millis() as u32).saturating_sub(last) < LINK_TIMEOUT_MS
+                });
             let latency = runs.iter().flatten().map(|r| r.shared.buffer_ms.get()).fold(0.0, f32::max);
             let fresh = peers.iter().find(|p| p.advert.id == l.host);
+            let (hear_level, hear_latency_ms) = l.back.as_ref().map_or((0.0, 0.0), |b| {
+                let streams = b.shared.streams.lock().unwrap();
+                streams.iter().fold((0.0f32, 0.0f32), |(lvl, lat), st| (lvl.max(meter(st.peak)), lat.max(st.stats.latency_ms())))
+            });
             Link {
                 host: HostInfo {
                     id: id_str(l.host),
@@ -527,7 +686,9 @@ impl Engine {
                 status: if alive { "connected" } else { "reconnecting" },
                 latency_ms: latency,
                 send: Sends { system: l.system.is_some(), mic: l.mic.is_some() },
-                hear: Sends::default(),
+                hear: l.hear,
+                hear_level,
+                hear_latency_ms,
             }
         });
 

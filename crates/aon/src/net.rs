@@ -9,9 +9,9 @@ use aon_core::resample::Resampler;
 use rtrb::Consumer;
 use std::collections::{HashMap, VecDeque};
 use std::hash::{BuildHasher, RandomState};
-use std::net::{SocketAddr, UdpSocket};
+use std::net::{IpAddr, SocketAddr, UdpSocket};
 use std::sync::atomic::Ordering::Relaxed;
-use std::sync::atomic::{AtomicBool, AtomicU32};
+use std::sync::atomic::{AtomicBool, AtomicU16, AtomicU32};
 use std::sync::{Arc, Mutex};
 use std::time::{Duration, Instant};
 
@@ -251,6 +251,19 @@ pub struct HubShared {
     pub output: Mutex<String>,
     /// Ask the hub to reopen its output (e.g. the user picked another device).
     pub reopen: AtomicBool,
+    /// The UDP port the hub actually listens on (useful when bound to 0).
+    pub port: AtomicU16,
+    /// Clients asking to hear this device, by (address, device id).
+    pub wants: Mutex<HashMap<(IpAddr, u64), Want>>,
+}
+
+/// A client's standing request to have this host's audio streamed back.
+#[derive(Clone, Copy, Debug)]
+pub struct Want {
+    pub port: u16,
+    pub system: bool,
+    pub mic: bool,
+    pub at: Instant,
 }
 
 struct Incoming {
@@ -310,6 +323,8 @@ pub fn run_hub(
 ) -> Result<()> {
     let sock = UdpSocket::bind(("0.0.0.0", port))?;
     sock.set_read_timeout(Some(Duration::from_millis(5)))?;
+    let port = sock.local_addr()?.port();
+    shared.port.store(port, Relaxed);
     if verbose {
         println!("Hub listening on UDP port {port}");
     }
@@ -391,6 +406,13 @@ pub fn run_hub(
                         protocol::encode_nack(&mut out, stream, &missing);
                         let _ = sock.send_to(&out, addr);
                     }
+                }
+                Some(Packet::Want { device, port, system, mic }) => {
+                    let want = Want { port, system, mic, at: Instant::now() };
+                    shared.wants.lock().unwrap().insert((addr.ip(), device), want);
+                    // Acknowledge, so a client that sends nothing still knows we're here.
+                    protocol::encode_status(&mut out, 0, 0.0);
+                    let _ = sock.send_to(&out, addr);
                 }
                 Some(Packet::Hello { stream, device, source, os, name }) => {
                     join(&mut sources, addr, stream, output.as_ref());

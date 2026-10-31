@@ -725,7 +725,9 @@ impl Device {
         }
 
         let mut loopback_aggregate: Option<LoopbackDevice> = None;
-        let mut audio_unit = if self.supports_input() {
+        // Aonin patch: a forced loopback taps the device's output even when it
+        // also has inputs (virtual loopback devices such as BlackHole).
+        let mut audio_unit = if self.supports_input() && !super::force_loopback() {
             audio_unit_from_device(self, AudioUnitMode::Input)?
         } else {
             loopback_aggregate.replace(LoopbackDevice::from_device(self)?);

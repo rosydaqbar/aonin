@@ -19,6 +19,9 @@
 //! (0 system audio, 1 mic), os u8 (0 Windows, 1 macOS), then the UTF-8
 //! device name. It names the stream and doubles as a keepalive.
 //! Status payload (hub -> sender, once a second): buffer depth in 0.1 ms, u16.
+//! Want payload (client -> host, once a second while wanted): device id u64,
+//! return port u16, flags u8 (bit 0 host system audio, bit 1 host mic). Asks
+//! the host to stream back to the client's address on that port.
 
 pub const MAGIC: [u8; 4] = *b"AON1";
 pub const SAMPLE_RATE: u32 = 48_000;
@@ -41,6 +44,7 @@ pub enum Kind {
     Nack = 3,
     Hello = 4,
     Status = 5,
+    Want = 6,
 }
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -62,6 +66,7 @@ pub enum Packet {
     Nack { stream: u32, seqs: Vec<u32> },
     Hello { stream: u32, device: u64, source: Source, os: Os, name: String },
     Status { stream: u32, buffer_ms: f32 },
+    Want { device: u64, port: u16, system: bool, mic: bool },
 }
 
 fn header(buf: &mut Vec<u8>, kind: Kind, stream: u32, seq: u32) {
@@ -119,6 +124,13 @@ pub fn encode_status(buf: &mut Vec<u8>, stream: u32, buffer_ms: f32) {
     buf.extend_from_slice(&((buffer_ms * 10.0).clamp(0.0, 65535.0) as u16).to_le_bytes());
 }
 
+pub fn encode_want(buf: &mut Vec<u8>, device: u64, port: u16, system: bool, mic: bool) {
+    header(buf, Kind::Want, 0, 0);
+    buf.extend_from_slice(&device.to_le_bytes());
+    buf.extend_from_slice(&port.to_le_bytes());
+    buf.push(system as u8 | (mic as u8) << 1);
+}
+
 pub fn decode(data: &[u8]) -> Option<Packet> {
     if data.len() < HEADER_BYTES || data[0..4] != MAGIC {
         return None;
@@ -165,6 +177,12 @@ pub fn decode(data: &[u8]) -> Option<Packet> {
             let raw = u16::from_le_bytes(payload.get(0..2)?.try_into().unwrap());
             Some(Packet::Status { stream, buffer_ms: raw as f32 / 10.0 })
         }
+        6 => {
+            let p = payload.get(0..11)?;
+            let device = u64::from_le_bytes(p[0..8].try_into().unwrap());
+            let port = u16::from_le_bytes(p[8..10].try_into().unwrap());
+            Some(Packet::Want { device, port, system: p[10] & 1 != 0, mic: p[10] & 2 != 0 })
+        }
         _ => None,
     }
 }
@@ -202,6 +220,8 @@ mod tests {
         );
         encode_status(&mut buf, 3, 21.8);
         assert_eq!(decode(&buf), Some(Packet::Status { stream: 3, buffer_ms: 21.8 }));
+        encode_want(&mut buf, 77, 50_123, false, true);
+        assert_eq!(decode(&buf), Some(Packet::Want { device: 77, port: 50_123, system: false, mic: true }));
     }
 
     #[test]

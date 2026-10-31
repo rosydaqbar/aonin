@@ -67,9 +67,9 @@
             </div>
             <div class="grid2">
               <Switch label="Send system audio" hint="everything this device plays" checked={app.link.send.system} onchange={(on) => actions.setSend('system', on)} />
-              <Switch label="Hear host audio" hint="coming soon" disabled />
+              <Switch label="Hear host audio" hint="what {app.link.host.name}'s apps play, without the mix" checked={app.link.hear.system} onchange={(on) => actions.setHear('system', on)} />
               <Switch label="Send microphone" hint={app.devices.mic || app.devices.defaultMic} checked={app.link.send.mic} onchange={(on) => actions.setSend('mic', on)} />
-              <Switch label="Hear host mic" hint="coming soon" disabled />
+              <Switch label="Hear host mic" hint="{app.link.host.name}'s microphone, played here" checked={app.link.hear.mic} onchange={(on) => actions.setHear('mic', on)} />
             </div>
           </div>
         {/if}

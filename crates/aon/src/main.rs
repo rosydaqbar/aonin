@@ -37,6 +37,32 @@ enum Cmd {
         #[arg(long)]
         output: Option<String>,
     },
+    /// Become a host through the app engine (discovery, two-way, stats).
+    Host {
+        /// Output device (substring of its name). Default: system default.
+        #[arg(long)]
+        output: Option<String>,
+    },
+    /// Join a host found on the network through the app engine.
+    Join {
+        /// Part of the host's name; the first host seen if omitted.
+        name: Option<String>,
+        /// Ask the host to stream its own audio back.
+        #[arg(long)]
+        hear_system: bool,
+        /// Ask the host to stream its microphone back.
+        #[arg(long)]
+        hear_mic: bool,
+        /// Don't send this machine's system audio.
+        #[arg(long)]
+        no_send: bool,
+        /// Where to play what comes back (substring). Default: system default.
+        #[arg(long)]
+        output: Option<String>,
+        /// Seconds to stay connected.
+        #[arg(long, default_value_t = 30)]
+        seconds: u64,
+    },
     /// Stream this machine's audio to a hub.
     Send {
         /// Hub address, e.g. 192.168.1.20 or 192.168.1.20:47100
@@ -59,6 +85,47 @@ enum Cmd {
 fn main() -> Result<()> {
     match Cli::parse().cmd {
         Cmd::Devices => audio::list_devices(),
+        Cmd::Host { output } => {
+            let engine = cli_engine(output);
+            engine.become_host()?;
+            loop {
+                std::thread::sleep(std::time::Duration::from_secs(2));
+                println!("{}", engine.tick().summary());
+            }
+        }
+        Cmd::Join { name, hear_system, hear_mic, no_send, output, seconds } => {
+            let engine = cli_engine(output);
+            let want = name.map(|n| n.to_lowercase());
+            let deadline = std::time::Instant::now() + std::time::Duration::from_secs(10);
+            let host = loop {
+                let snap = engine.tick();
+                let found = snap.host_ids().into_iter().find(|(_, n, ok)| *ok && want.as_ref().is_none_or(|w| n.to_lowercase().contains(w)));
+                if let Some((id, n, _)) = found {
+                    println!("found host {n}");
+                    break id;
+                }
+                if std::time::Instant::now() > deadline {
+                    anyhow::bail!("no matching host on the network ({})", snap.summary());
+                }
+                std::thread::sleep(std::time::Duration::from_millis(250));
+            };
+            engine.connect(aon::engine::parse_id(&host).unwrap())?;
+            if no_send {
+                engine.set_send(aon_core::protocol::Source::System, false);
+            }
+            if hear_system {
+                engine.set_hear(aon_core::protocol::Source::System, true)?;
+            }
+            if hear_mic {
+                engine.set_hear(aon_core::protocol::Source::Mic, true)?;
+            }
+            for _ in 0..seconds / 2 {
+                std::thread::sleep(std::time::Duration::from_secs(2));
+                println!("{}", engine.tick().summary());
+            }
+            engine.shutdown();
+            Ok(())
+        }
         Cmd::Tone { output, freq, seconds, level } => {
             let _stream = audio::play_tone(output.as_deref(), freq, level)?;
             std::thread::sleep(std::time::Duration::from_secs(seconds));
@@ -83,6 +150,15 @@ fn main() -> Result<()> {
             net::run_sender(cfg, rx, rate, &net::SendShared::default())
         }
     }
+}
+
+/// An engine for CLI testing: random identity, no persisted state.
+fn cli_engine(output: Option<String>) -> std::sync::Arc<aon::engine::Engine> {
+    use std::hash::{BuildHasher, RandomState};
+    let id = RandomState::new().hash_one(std::time::Instant::now()) | 1;
+    let name = gethostname::gethostname().to_string_lossy().into_owned();
+    let prefs = aon::engine::Prefs { reconnect: false, last_host: None, output, system_source: None, mic: None };
+    aon::engine::Engine::new(id, name, prefs)
 }
 
 fn resolve(hub: &str) -> Result<SocketAddr> {

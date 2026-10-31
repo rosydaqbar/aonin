@@ -38,6 +38,9 @@ export interface Link {
   latencyMs: number;
   send: { system: boolean; mic: boolean };
   hear: { system: boolean; mic: boolean };
+  /** What comes back from the host: meter level 0..1 and buffer depth. */
+  hearLevel?: number;
+  hearLatencyMs?: number;
 }
 
 export interface Stats {

@@ -65,10 +65,10 @@
           <button class="chip" aria-pressed={app.link.send.system} onclick={() => actions.setSend('system', !app.link!.send.system)}><Monitor size={13} strokeWidth={1.75} />system audio</button>
           <button class="chip" aria-pressed={app.link.send.mic} onclick={() => actions.setSend('mic', !app.link!.send.mic)} aria-label={app.link.send.mic ? 'Turn microphone off' : 'Turn microphone on'}>{#if app.link.send.mic}<Mic size={13} strokeWidth={1.75} />mic on{:else}<MicOff size={13} strokeWidth={1.75} />mic off{/if}</button>
         </span>
-        <span class="label" title="Coming soon">hear</span>
+        <span class="label">hear</span>
         <span class="set">
-          <button class="chip" aria-pressed="false" disabled title="Coming soon"><Monitor size={13} strokeWidth={1.75} />host audio</button>
-          <button class="chip" aria-pressed="false" disabled title="Coming soon"><Mic size={13} strokeWidth={1.75} />host mic</button>
+          <button class="chip" aria-pressed={app.link.hear.system} onclick={() => actions.setHear('system', !app.link!.hear.system)}><Monitor size={13} strokeWidth={1.75} />host audio</button>
+          <button class="chip" aria-pressed={app.link.hear.mic} onclick={() => actions.setHear('mic', !app.link!.hear.mic)}><Mic size={13} strokeWidth={1.75} />host mic</button>
         </span>
       </div>
     </section>
