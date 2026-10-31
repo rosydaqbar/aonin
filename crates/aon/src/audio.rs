@@ -51,9 +51,26 @@ fn pick(devices: impl Iterator<Item = Device>, default: Option<Device>, name: Op
     }
 }
 
-/// Start capturing. Returns the stream (keep it alive), a ring of interleaved
-/// stereo f32 samples, and the device sample rate.
-pub fn start_capture(source: Source, name: Option<&str>) -> Result<(Stream, Consumer<f32>, u32)> {
+/// Keeps a capture running; drop it to stop.
+pub struct Capture(#[allow(dead_code)] Box<dyn std::any::Any>);
+
+/// Start capturing. Returns the keep-alive guard, a ring of interleaved
+/// stereo f32 samples, and the sample rate.
+///
+/// System audio never includes what Aonin itself plays: on Windows the
+/// default source uses process loopback excluding this process, and on macOS
+/// the (patched) cpal tap excludes it.
+pub fn start_capture(source: Source, name: Option<&str>) -> Result<(Capture, Consumer<f32>, u32)> {
+    #[cfg(windows)]
+    if matches!(source, Source::System) && name.is_none() {
+        match crate::winloop::start() {
+            Ok((guard, rx, rate)) => {
+                println!("Capturing System from every app except Aonin ({rate} Hz)");
+                return Ok((Capture(Box::new(guard)), rx, rate));
+            }
+            Err(e) => eprintln!("process loopback unavailable ({e}); falling back to device loopback"),
+        }
+    }
     let host = cpal::default_host();
     let (device, supported) = match source {
         Source::System => {
@@ -83,7 +100,7 @@ pub fn start_capture(source: Source, name: Option<&str>) -> Result<(Stream, Cons
         f => bail!("unsupported sample format {f:?}"),
     }?;
     stream.play().context("starting capture")?;
-    Ok((stream, rx, rate))
+    Ok((Capture(Box::new(stream)), rx, rate))
 }
 
 fn build_capture<T>(device: &Device, config: StreamConfig, mut tx: Producer<f32>) -> Result<Stream>

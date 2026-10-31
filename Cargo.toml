@@ -4,3 +4,8 @@ members = ["crates/aon-core", "crates/aon", "app/src-tauri"]
 
 [profile.release]
 debug = 1
+
+# cpal with one change: the macOS loopback tap leaves out Aonin's own
+# process, so a device never records (and re-sends) what it plays itself.
+[patch.crates-io]
+cpal = { path = "vendor/cpal" }

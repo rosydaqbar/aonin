@@ -5,3 +5,5 @@ pub mod audio;
 pub mod discovery;
 pub mod engine;
 pub mod net;
+#[cfg(windows)]
+mod winloop;

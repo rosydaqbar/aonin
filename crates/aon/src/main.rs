@@ -49,6 +49,10 @@ enum Cmd {
         /// Testing: randomly drop this percentage of packets to simulate bad Wi-Fi.
         #[arg(long, default_value_t = 0, hide = true)]
         drop_percent: u32,
+        /// Testing: play a quiet tone from this same process on this output
+        /// device. System capture should leave it out.
+        #[arg(long, hide = true)]
+        self_tone: Option<String>,
     },
 }
 
@@ -64,8 +68,9 @@ fn main() -> Result<()> {
             let follow = output.is_none();
             net::run_hub(port, || audio::start_output(output.as_deref()), follow, &net::HubShared::default(), true)
         }
-        Cmd::Send { hub, source, device, drop_percent } => {
+        Cmd::Send { hub, source, device, drop_percent, self_tone } => {
             let hub = resolve(&hub)?;
+            let _tone = self_tone.map(|out| audio::play_tone(Some(&out), 440.0, 0.01)).transpose()?;
             let (_stream, rx, rate) = audio::start_capture(source, device.as_deref())?;
             let os = if cfg!(target_os = "macos") { aon_core::protocol::Os::MacOs } else { aon_core::protocol::Os::Windows };
             let name = gethostname::gethostname().to_string_lossy().into_owned();
