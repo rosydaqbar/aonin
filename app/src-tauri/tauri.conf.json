@@ -39,7 +39,8 @@
     "windows": {
       "nsis": {
         "installMode": "both",
-        "installerHooks": "windows-hooks.nsh"
+        "installerHooks": "windows-hooks.nsh",
+        "installerIcon": "icons/icon.ico"
       }
     }
   }
