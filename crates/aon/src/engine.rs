@@ -90,7 +90,6 @@ pub struct Engine {
     mix: Mutex<HashMap<String, Mix>>,
     prefs: Mutex<Prefs>,
     want_mic: Mutex<bool>,
-    started: Instant,
     /// Sends Want packets to the host (also a keepalive) and reads its acks.
     ctrl: UdpSocket,
     last_want: Mutex<Instant>,
@@ -104,7 +103,6 @@ pub struct Engine {
 pub struct Snapshot {
     me: Me,
     gate: Option<&'static str>,
-    searching: bool,
     hosting: Option<Hosting>,
     link: Option<Link>,
     hosts: Vec<HostInfo>,
@@ -274,7 +272,6 @@ impl Engine {
             mix: Mutex::new(HashMap::new()),
             prefs: Mutex::new(prefs),
             want_mic: Mutex::new(false),
-            started: Instant::now(),
             ctrl: {
                 let s = UdpSocket::bind(("0.0.0.0", 0)).expect("bind control socket");
                 s.set_nonblocking(true).expect("nonblocking control socket");
@@ -726,23 +723,22 @@ impl Engine {
             outputs: names.outputs,
             mics: names.inputs,
         };
+        // Copy what the snapshot needs and release the lock here: a guard
+        // taken inside the struct literal below would live to the end of the
+        // statement, and a second one would deadlock.
+        let (quality, start_at_login, quiet_wifi) = (prefs.quality.name(), prefs.start_at_login, prefs.quiet_wifi);
         drop(prefs);
         Snapshot {
             me: Me { name: self.me.name.clone(), os: os_name(self.me.os) },
             gate: None,
-            searching: peers.is_empty() && self.started.elapsed() < Duration::from_secs(3),
             hosting,
             link,
             hosts,
-            quality: self.prefs.lock().unwrap().quality.name(),
+            quality,
             output_lost,
             stats,
             devices,
-            options: Options {
-                reconnect,
-                start_at_login: self.prefs.lock().unwrap().start_at_login,
-                quiet_wifi: self.prefs.lock().unwrap().quiet_wifi,
-            },
+            options: Options { reconnect, start_at_login, quiet_wifi },
             error,
         }
     }
@@ -751,5 +747,35 @@ impl Engine {
         self.disconnect();
         self.stop_hosting();
         self.disco.stop.store(true, Relaxed);
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use std::sync::mpsc;
+
+    /// A lock held across the snapshot once froze the UI: tick must return.
+    #[test]
+    fn tick_returns_and_never_deadlocks() {
+        let (tx, rx) = mpsc::channel();
+        std::thread::spawn(move || {
+            let prefs = Prefs {
+                reconnect: true,
+                last_host: None,
+                output: None,
+                system_source: None,
+                mic: None,
+                quality: Quality::Cd,
+                start_at_login: true,
+                quiet_wifi: false,
+            };
+            let engine = Engine::new(1, "test".into(), prefs);
+            let snaps: Vec<String> = (0..3).map(|_| engine.tick().quality.to_string()).collect();
+            engine.shutdown();
+            let _ = tx.send(snaps);
+        });
+        let snaps = rx.recv_timeout(Duration::from_secs(20)).expect("tick() hung");
+        assert!(snaps.iter().all(|q| q == "cd"));
     }
 }

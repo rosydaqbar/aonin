@@ -81,8 +81,8 @@
           </div>
           {#if app.hosts.length === 0}
             <div class="solo">
-              <p>{app.searching ? 'Looking for hosts on this network…' : 'No host on this network yet.'}</p>
-              {#if !app.searching}<button class="btn primary" onclick={actions.becomeHost}>become host</button>{/if}
+              <p>No host on this network yet.</p>
+              <button class="btn primary" onclick={actions.becomeHost}>become host</button>
             </div>
           {/if}
         {/if}

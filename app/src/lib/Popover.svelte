@@ -39,12 +39,8 @@
     </section>
   {:else if idle && app.hosts.length === 0}
     <section class="solo">
-      {#if app.searching}
-        <p class="searching"><StatusMark mark="connecting" /> Looking for hosts on this network…</p>
-      {:else}
-        <p>No host on this network yet.</p>
-        <button class="btn primary" onclick={actions.becomeHost}>become host</button>
-      {/if}
+      <p>No host on this network yet.</p>
+      <button class="btn primary" onclick={actions.becomeHost}>become host</button>
     </section>
   {/if}
 
@@ -150,7 +146,6 @@
   .alert { margin: 12px 16px 0; padding: 9px 12px; border-radius: 8px; background: var(--red-wash); color: var(--ink); }
   .solo { padding: 28px 16px 26px; display: flex; flex-direction: column; align-items: flex-start; gap: 14px; }
   .solo p { font-weight: 600; }
-  .searching { display: flex; align-items: center; gap: 10px; font-weight: 400 !important; color: var(--ink-2); }
   .block { padding: 14px 16px 4px; }
   .block + .block { padding-top: 18px; }
   .head { display: flex; justify-content: space-between; gap: 12px; margin-bottom: 2px; }

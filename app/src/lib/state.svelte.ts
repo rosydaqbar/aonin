@@ -55,7 +55,6 @@ export interface Stats {
 export interface AppState {
   me: { name: string; os: Os };
   gate: null | 'permission' | 'firewall';
-  searching: boolean;
   hosting: null | { output: string; clients: ClientRow[] };
   link: null | Link;
   hosts: HostInfo[];
@@ -81,7 +80,6 @@ export const QUALITY: Record<Quality, { label: string; detail: string; rate: str
 const base: AppState = {
   me: { name: 'PC-Studio', os: 'windows' },
   gate: null,
-  searching: false,
   hosting: null,
   link: null,
   hosts: [],
@@ -141,7 +139,6 @@ export const DEMOS: Record<string, Partial<AppState>> = {
     hosts: [pcStudio, { id: 'h2', name: 'Studio iMac', os: 'macos', clients: 1, blocked: 'Its audio already comes from this laptop.' }],
   },
   empty: { me: { name: 'Work Laptop', os: 'windows' } },
-  searching: { me: { name: 'Work Laptop', os: 'windows' }, searching: true },
   permission: { me: { name: 'Office MacBook', os: 'macos' }, gate: 'permission' },
   firewall: { gate: 'firewall' },
   degraded: {
@@ -168,7 +165,7 @@ export const inTauri = typeof window !== 'undefined' && '__TAURI_INTERNALS__' in
 
 function load(): AppState {
   // In the app the backend pushes the real state; start empty until it does.
-  if (inTauri) return structuredClone({ ...base, me: { name: '', os: navigator.userAgent.includes('Mac') ? 'macos' : 'windows' }, searching: true, stats: [] });
+  if (inTauri) return structuredClone({ ...base, me: { name: '', os: navigator.userAgent.includes('Mac') ? 'macos' : 'windows' }, stats: [] });
   const name = typeof location === 'undefined' ? 'host' : new URLSearchParams(location.search).get('demo') ?? 'host';
   return structuredClone({ ...base, ...(DEMOS[name] ?? DEMOS.host) });
 }
@@ -191,7 +188,6 @@ export function roleLine(s: AppState): string {
     return n === 0 ? 'hosting · no clients yet' : `hosting · ${n} ${n === 1 ? 'client' : 'clients'}`;
   }
   if (s.link) return s.link.status === 'connected' ? `sending to ${s.link.host.name}` : `reconnecting to ${s.link.host.name}`;
-  if (s.searching) return 'looking for hosts';
   return 'not connected';
 }
 
