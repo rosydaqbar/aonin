@@ -1,4 +1,5 @@
 <script lang="ts">
+  import { Power } from '@lucide/svelte';
   import ClientRow from './ClientRow.svelte';
   import StatusMark from './StatusMark.svelte';
   import Switch from './Switch.svelte';
@@ -31,9 +32,21 @@
       {#each sections as s}
         <a href="#{s}" aria-current={section === s ? 'page' : undefined}>{s[0].toUpperCase() + s.slice(1)}</a>
       {/each}
+      <button class="quit" onclick={actions.quit}><Power size={14} strokeWidth={1.75} />Quit Aonin</button>
     </nav>
 
     <main>
+      {#if app.gate === 'permission'}
+        <div class="gate">
+          <p>Aonin needs permission to capture this Mac's audio.</p>
+          <button class="btn primary" onclick={actions.grantPermission}>Allow audio capture</button>
+        </div>
+      {:else if app.gate === 'firewall'}
+        <div class="gate">
+          <p>Windows Firewall is stopping other devices from reaching this PC.</p>
+          <button class="btn primary" onclick={actions.allowFirewall}>Allow in firewall</button>
+        </div>
+      {/if}
       {#if app.error}
         <p class="alert" role="alert">{app.error}</p>
       {/if}
@@ -178,6 +191,21 @@
   nav a { padding: 8px 10px; border-radius: 6px; color: var(--ink); text-decoration: none; }
   nav a:hover { background: var(--recess); }
   nav a[aria-current='page'] { background: var(--recess); font-weight: 700; }
+  .quit {
+    margin-top: auto;
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    padding: 8px 10px;
+    border: 0;
+    border-radius: 6px;
+    background: transparent;
+    color: var(--ink-2);
+    text-align: left;
+  }
+  .quit:hover { background: var(--recess); color: var(--ink); }
+  .gate { display: flex; align-items: center; gap: 16px; margin-top: 16px; padding: 12px 14px; border-radius: 8px; background: var(--recess); }
+  .gate p { flex: 1; font-weight: 600; }
   main { padding: 8px 28px 28px; overflow-y: auto; }
   h2 { font-size: var(--size); font-weight: 700; }
   .titlebar { display: flex; align-items: center; gap: 14px; margin: 22px 0 8px; min-height: 28px; }
