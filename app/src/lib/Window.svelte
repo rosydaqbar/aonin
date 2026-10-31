@@ -146,14 +146,14 @@
           <Switch label="Keep Wi-Fi steady while streaming" hint="coming soon · pauses AirDrop and Handoff, which make Mac Wi-Fi stall every few seconds" disabled />
         {/if}
       {:else}
-        <div class="titlebar"><h2>Quality</h2></div>
+        <div class="titlebar"><h2>Quality</h2><span class="label">for audio this device sends</span></div>
         <div class="radios" role="radiogroup" aria-label="Quality">
           {#each Object.entries(QUALITY) as [key, q]}
             <label class="radio">
-              <input type="radio" name="quality" value={key} bind:group={app.quality} disabled={key !== 'lossless'} />
+              <input type="radio" name="quality" value={key} checked={app.quality === key} onchange={() => actions.setQuality(key as Quality)} />
               <span class="dotbox" aria-hidden="true"></span>
               <span class="qname">{q.label}</span>
-              <span class="label">{key === 'lossless' ? q.detail : `coming soon · ${q.detail}`}</span>
+              <span class="label">{q.detail}</span>
               <span class="label num r">{q.rate}</span>
             </label>
           {/each}
@@ -217,7 +217,6 @@
   .radio { display: grid; grid-template-columns: 18px 84px 1fr auto; gap: 12px; align-items: center; min-height: 46px; border-bottom: 1px solid var(--line); }
   .radio input { position: absolute; opacity: 0; width: 1px; height: 1px; }
   .dotbox { width: 16px; height: 16px; border-radius: 50%; border: 1px solid var(--line-strong); background: var(--raised); }
-  .radio:has(input:disabled) { opacity: 0.5; }
   .radio input:checked + .dotbox { border: 5px solid var(--hole-fill); }
   .radio input:focus-visible + .dotbox { outline: 2px solid var(--focus); outline-offset: 2px; }
   .qname { font-weight: 600; }

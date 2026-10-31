@@ -59,6 +59,9 @@ export const actions = {
   async setHear(source: 'system' | 'mic', on: boolean) {
     if (!(await call('set_hear', { source, on })) && app.link) app.link.hear[source] = on;
   },
+  async setQuality(quality: 'lossless' | 'cd' | 'balanced' | 'saver') {
+    if (!(await call('set_quality', { quality }))) app.quality = quality;
+  },
   async setDevice(role: 'output' | 'systemSource' | 'mic', name: string) {
     if (!(await call('set_device', { role, name }))) app.devices[role] = name;
   },

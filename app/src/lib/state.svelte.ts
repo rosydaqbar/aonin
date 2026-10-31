@@ -72,8 +72,8 @@ export interface AppState {
 export const QUALITY: Record<Quality, { label: string; detail: string; rate: string }> = {
   lossless: { label: 'Lossless', detail: '24-bit · 48 kHz, identical to the source', rate: '2.3 Mbps per stream' },
   cd: { label: 'CD', detail: '16-bit · 48 kHz, CD quality', rate: '1.5 Mbps per stream' },
-  balanced: { label: 'Balanced', detail: 'Opus, for busy Wi-Fi', rate: '256 kbps per stream' },
-  saver: { label: 'Saver', detail: 'Opus, for weak Wi-Fi', rate: '96 kbps per stream' },
+  balanced: { label: 'Balanced', detail: 'Opus, for busy Wi-Fi · adds about 12 ms', rate: '256 kbps per stream' },
+  saver: { label: 'Saver', detail: 'Opus, for weak Wi-Fi · adds about 12 ms', rate: '96 kbps per stream' },
 };
 
 // ---- demo scenarios (design review only; never shown in the Tauri app) ----

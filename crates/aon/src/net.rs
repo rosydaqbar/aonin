@@ -4,7 +4,7 @@
 use anyhow::Result;
 use crate::audio;
 use aon_core::playout::{self, StreamStats};
-use aon_core::protocol::{self, BLOCK_SAMPLES, Block, MAX_PACKET_BYTES, Os, Packet, SAMPLE_RATE, Source};
+use aon_core::protocol::{self, BLOCK_SAMPLES, Block, Codec, MAX_PACKET_BYTES, OPUS_FRAME_BLOCKS, OPUS_FRAME_FRAMES, Os, Packet, Quality, SAMPLE_RATE, Source};
 use aon_core::resample::Resampler;
 use rtrb::Consumer;
 use std::collections::{HashMap, VecDeque};
@@ -67,6 +67,13 @@ struct Outgoing {
     sock: UdpSocket,
     stream: u32,
     seq: u32,
+    codec: Codec,
+    /// Opus only: the encoder, samples waiting for a full frame (and the
+    /// frame's first block), and sent frames kept for retransmission.
+    opus: Option<opus::Encoder>,
+    pending: Vec<f32>,
+    pending_seq: u32,
+    frames: VecDeque<(u32, Vec<u8>)>,
     history: VecDeque<(u32, Box<Block>)>,
     buf: Vec<u8>,
     sent: u64,
@@ -78,8 +85,11 @@ struct Outgoing {
 
 impl Outgoing {
     fn emit(&mut self, block: Box<Block>) {
+        if self.opus.is_some() {
+            return self.emit_opus(block);
+        }
         let prev = self.history.back().filter(|(s, _)| s.wrapping_add(1) == self.seq).map(|(_, b)| &**b);
-        protocol::encode_audio(&mut self.buf, self.stream, self.seq, &block, prev, false);
+        protocol::encode_audio(&mut self.buf, self.codec, self.stream, self.seq, &block, prev, false);
         self.send_lossy();
         if self.history.len() == HISTORY {
             self.history.pop_front();
@@ -87,6 +97,41 @@ impl Outgoing {
         self.history.push_back((self.seq, block));
         self.seq = self.seq.wrapping_add(1);
         self.sent += 1;
+    }
+
+    /// Collect blocks into 10 ms frames, encode, send with the previous frame
+    /// as the redundant copy.
+    fn emit_opus(&mut self, block: Box<Block>) {
+        if self.pending.is_empty() {
+            self.pending_seq = self.seq;
+        }
+        self.pending.extend_from_slice(&block[..]);
+        self.seq = self.seq.wrapping_add(1);
+        self.sent += 1;
+        if self.pending.len() < OPUS_FRAME_FRAMES * 2 {
+            return;
+        }
+        let mut out = [0u8; 1500];
+        let n = match self.opus.as_mut().unwrap().encode_float(&self.pending, &mut out) {
+            Ok(n) => n,
+            Err(_) => 0,
+        };
+        self.pending.clear();
+        if n == 0 {
+            return;
+        }
+        let first = self.pending_seq;
+        let prev = self
+            .frames
+            .back()
+            .filter(|(s, _)| s.wrapping_add(OPUS_FRAME_BLOCKS as u32) == first)
+            .map(|(_, f)| f.as_slice());
+        protocol::encode_opus(&mut self.buf, self.stream, first, &out[..n], prev, false);
+        self.send_lossy();
+        if self.frames.len() == HISTORY / OPUS_FRAME_BLOCKS {
+            self.frames.pop_front();
+        }
+        self.frames.push_back((first, out[..n].to_vec()));
     }
 
     fn send_lossy(&mut self) {
@@ -104,10 +149,28 @@ impl Outgoing {
         let mut inbuf = [0u8; 2048];
         while let Ok(n) = self.sock.recv(&mut inbuf) {
             match protocol::decode(&inbuf[..n]) {
+                Some(Packet::Nack { stream, seqs }) if stream == self.stream && self.opus.is_some() => {
+                    // Resend each frame that covers a missing block, once.
+                    let mut firsts: Vec<u32> = Vec::new();
+                    for want in seqs {
+                        let hit = self.frames.iter().find(|(s, _)| want.wrapping_sub(*s) < OPUS_FRAME_BLOCKS as u32);
+                        if let Some((s, _)) = hit {
+                            if !firsts.contains(s) {
+                                firsts.push(*s);
+                            }
+                        }
+                    }
+                    for first in firsts {
+                        let frame = self.frames.iter().find(|(s, _)| *s == first).map(|(_, f)| f.clone()).unwrap();
+                        protocol::encode_opus(&mut self.buf, self.stream, first, &frame, None, true);
+                        self.send_lossy();
+                        self.retransmitted += 1;
+                    }
+                }
                 Some(Packet::Nack { stream, seqs }) if stream == self.stream => {
                     for want in seqs {
                         if let Some((_, b)) = self.history.iter().find(|(s, _)| *s == want) {
-                            protocol::encode_audio(&mut self.buf, self.stream, want, b, None, true);
+                            protocol::encode_audio(&mut self.buf, self.codec, self.stream, want, b, None, true);
                             self.send_lossy();
                             self.retransmitted += 1;
                         }
@@ -127,6 +190,7 @@ pub struct SendConfig {
     pub hub: SocketAddr,
     pub who: Identity,
     pub source: Source,
+    pub quality: Quality,
     pub drop_percent: u32,
     /// Print stats to stdout (CLI).
     pub verbose: bool,
@@ -140,10 +204,23 @@ pub fn run_sender(cfg: SendConfig, mut cap: Consumer<f32>, dev_rate: u32, shared
     if cfg.verbose {
         println!("Sending to {} (stream {stream:08x})", cfg.hub);
     }
+    let opus = match cfg.quality.opus_bitrate() {
+        Some(bits) => {
+            let mut enc = opus::Encoder::new(SAMPLE_RATE, opus::Channels::Stereo, opus::Application::LowDelay)?;
+            enc.set_bitrate(opus::Bitrate::Bits(bits))?;
+            Some(enc)
+        }
+        None => None,
+    };
     let mut net = Outgoing {
         sock,
         stream,
         seq: 0,
+        codec: cfg.quality.codec(),
+        opus,
+        pending: Vec::with_capacity(OPUS_FRAME_FRAMES * 2),
+        pending_seq: 0,
+        frames: VecDeque::new(),
         history: VecDeque::with_capacity(HISTORY),
         buf: Vec::with_capacity(MAX_PACKET_BYTES),
         sent: 0,
@@ -267,6 +344,8 @@ pub struct Want {
 }
 
 struct Incoming {
+    /// Opus streams only, created on the first Opus packet.
+    opus: Option<opus::Decoder>,
     writer: playout::Writer,
     stats: Arc<StreamStats>,
     who: Option<(Identity, Source)>,
@@ -345,7 +424,7 @@ pub fn run_hub(
                 println!("+ {addr} joined (stream {stream:08x})");
             }
             let (writer, _, stats) = playout::stream(SAMPLE_RATE);
-            let mut src = Incoming { writer, stats, who: None, last_seen: Instant::now(), peak: 0.0, gap_env: 0.0, worst_gap: 0.0 };
+            let mut src = Incoming { opus: None, writer, stats, who: None, last_seen: Instant::now(), peak: 0.0, gap_env: 0.0, worst_gap: 0.0 };
             attach(&mut src, output);
             src
         });
@@ -399,6 +478,43 @@ pub fn run_hub(
                             if i == 1 || retransmit {
                                 src.stats.recovered.fetch_add(1, Relaxed);
                             }
+                        }
+                    }
+                    let missing = src.writer.take_nacks();
+                    if !missing.is_empty() {
+                        protocol::encode_nack(&mut out, stream, &missing);
+                        let _ = sock.send_to(&out, addr);
+                    }
+                }
+                Some(Packet::Opus { stream, seq, frames, retransmit }) => {
+                    join(&mut sources, addr, stream, output.as_ref());
+                    let src = sources.get_mut(&(addr, stream)).unwrap();
+                    let now = Instant::now();
+                    if !retransmit {
+                        src.track_gap((now - src.last_seen).as_secs_f64());
+                    }
+                    src.last_seen = now;
+                    if src.opus.is_none() {
+                        src.opus = opus::Decoder::new(SAMPLE_RATE, opus::Channels::Stereo).ok();
+                    }
+                    let mut pcm = vec![0f32; OPUS_FRAME_FRAMES * 2];
+                    for (i, frame) in frames.iter().enumerate() {
+                        let first = seq.wrapping_sub((i * OPUS_FRAME_BLOCKS) as u32);
+                        // Decoding a frame twice would disturb the decoder state.
+                        if src.writer.has(first) {
+                            continue;
+                        }
+                        let Some(dec) = src.opus.as_mut() else { break };
+                        let Ok(n) = dec.decode_float(frame, &mut pcm, false) else { continue };
+                        let mut fresh = false;
+                        for (k, chunk) in pcm[..n * 2].chunks_exact(BLOCK_SAMPLES).enumerate() {
+                            let mut b = [0f32; BLOCK_SAMPLES];
+                            b.copy_from_slice(chunk);
+                            src.peak = b.iter().fold(src.peak, |p, s| p.max(s.abs()));
+                            fresh |= src.writer.insert(first.wrapping_add(k as u32), &b);
+                        }
+                        if fresh && (i == 1 || retransmit) {
+                            src.stats.recovered.fetch_add(1, Relaxed);
                         }
                     }
                     let missing = src.writer.take_nacks();

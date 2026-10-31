@@ -75,6 +75,9 @@ enum Cmd {
         /// Testing: randomly drop this percentage of packets to simulate bad Wi-Fi.
         #[arg(long, default_value_t = 0, hide = true)]
         drop_percent: u32,
+        /// lossless, cd, balanced or saver.
+        #[arg(long, default_value = "lossless")]
+        quality: String,
         /// Testing: play a quiet tone from this same process on this output
         /// device. System capture should leave it out.
         #[arg(long, hide = true)]
@@ -135,7 +138,7 @@ fn main() -> Result<()> {
             let follow = output.is_none();
             net::run_hub(port, || audio::start_output(output.as_deref()), follow, &net::HubShared::default(), true)
         }
-        Cmd::Send { hub, source, device, drop_percent, self_tone } => {
+        Cmd::Send { hub, source, device, drop_percent, self_tone, quality } => {
             let hub = resolve(&hub)?;
             let _tone = self_tone.map(|out| audio::play_tone(Some(&out), 440.0, 0.01)).transpose()?;
             let (_stream, rx, rate) = audio::start_capture(source, device.as_deref())?;
@@ -146,7 +149,8 @@ fn main() -> Result<()> {
                 audio::Source::System => aon_core::protocol::Source::System,
                 audio::Source::Mic => aon_core::protocol::Source::Mic,
             };
-            let cfg = net::SendConfig { hub, who, source: kind, drop_percent, verbose: true };
+            let quality = aon_core::protocol::Quality::from_name(&quality).ok_or_else(|| anyhow::anyhow!("quality must be lossless, cd, balanced or saver"))?;
+            let cfg = net::SendConfig { hub, who, source: kind, quality, drop_percent, verbose: true };
             net::run_sender(cfg, rx, rate, &net::SendShared::default())
         }
     }
@@ -157,7 +161,7 @@ fn cli_engine(output: Option<String>) -> std::sync::Arc<aon::engine::Engine> {
     use std::hash::{BuildHasher, RandomState};
     let id = RandomState::new().hash_one(std::time::Instant::now()) | 1;
     let name = gethostname::gethostname().to_string_lossy().into_owned();
-    let prefs = aon::engine::Prefs { reconnect: false, last_host: None, output, system_source: None, mic: None };
+    let prefs = aon::engine::Prefs { reconnect: false, last_host: None, output, system_source: None, mic: None, quality: Default::default() };
     aon::engine::Engine::new(id, name, prefs)
 }
 

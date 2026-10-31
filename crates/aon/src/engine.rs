@@ -9,7 +9,7 @@ use crate::audio;
 use crate::discovery::{Advert, Discovery};
 use crate::net::{self, HubShared, Identity, SendConfig, SendShared};
 use anyhow::{Result, anyhow};
-use aon_core::protocol::{self, DEFAULT_PORT, Os, Source};
+use aon_core::protocol::{self, DEFAULT_PORT, Os, Quality, Source};
 use serde::Serialize;
 use std::collections::{BTreeMap, HashMap, HashSet};
 use std::net::{IpAddr, SocketAddr, UdpSocket};
@@ -68,6 +68,8 @@ pub struct Prefs {
     pub output: Option<String>,
     pub system_source: Option<String>,
     pub mic: Option<String>,
+    /// What this device sends: Lossless, CD, Balanced or Saver.
+    pub quality: Quality,
 }
 
 #[derive(Clone, Copy, Debug)]
@@ -324,6 +326,24 @@ impl Engine {
         }
     }
 
+    /// Change what this device sends; running streams restart on the new codec.
+    pub fn set_quality(&self, quality: Quality) {
+        self.prefs.lock().unwrap().quality = quality;
+        let (system, mic) = self.link.lock().unwrap().as_ref().map_or((false, false), |l| (l.system.is_some(), l.mic.is_some()));
+        for (source, on) in [(Source::System, system), (Source::Mic, mic)] {
+            if on {
+                self.set_send(source, false);
+                self.set_send(source, true);
+            }
+        }
+        // Streams back to clients are recreated on the next tick.
+        if let Some(h) = self.host.lock().unwrap().as_mut() {
+            for (_, r) in h.returns.drain() {
+                r.shared.stop.store(true, Relaxed);
+            }
+        }
+    }
+
     pub fn become_host(&self) -> Result<()> {
         let mut host = self.host.lock().unwrap();
         if host.is_none() {
@@ -371,12 +391,13 @@ impl Engine {
         let shared = Arc::new(SendShared::default());
         let s = shared.clone();
         let who = self.me.clone();
-        let device = {
+        let (device, quality) = {
             let p = self.prefs.lock().unwrap();
-            match source {
+            let device = match source {
                 Source::System => p.system_source.clone(),
                 Source::Mic => p.mic.clone(),
-            }
+            };
+            (device, p.quality)
         };
         let thread = std::thread::Builder::new()
             .name(format!("aonin-send-{source:?}"))
@@ -387,7 +408,7 @@ impl Engine {
                 };
                 let run = || -> Result<()> {
                     let (_stream, cap, rate) = audio::start_capture(kind, device.as_deref())?;
-                    net::run_sender(SendConfig { hub: addr, who, source, drop_percent: 0, verbose: false }, cap, rate, &s)
+                    net::run_sender(SendConfig { hub: addr, who, source, quality, drop_percent: 0, verbose: false }, cap, rate, &s)
                 };
                 if let Err(e) = run() {
                     eprintln!("sender {source:?}: {e}");
@@ -710,7 +731,7 @@ impl Engine {
             hosting,
             link,
             hosts,
-            quality: "lossless",
+            quality: self.prefs.lock().unwrap().quality.name(),
             output_lost,
             stats,
             devices,

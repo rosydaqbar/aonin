@@ -31,6 +31,8 @@ struct Config {
     system_source: Option<String>,
     #[serde(default)]
     mic: Option<String>,
+    #[serde(default)]
+    quality: Option<String>,
 }
 
 fn config_path(app: &AppHandle) -> Option<PathBuf> {
@@ -105,6 +107,17 @@ fn set_send(engine: Eng, source: String, on: bool) {
 #[tauri::command]
 fn set_hear(engine: Eng, source: String, on: bool) -> Result<(), String> {
     engine.set_hear(if source == "mic" { Source::Mic } else { Source::System }, on).map_err(err)
+}
+
+/// Lossless, CD, Balanced or Saver for what this device sends.
+#[tauri::command]
+fn set_quality(app: AppHandle, engine: Eng, quality: String) -> Result<(), String> {
+    let q = aon_core::protocol::Quality::from_name(&quality).ok_or("unknown quality")?;
+    engine.set_quality(q);
+    let mut cfg = load_config(&app);
+    cfg.quality = Some(quality);
+    save_config(&app, &cfg);
+    Ok(())
 }
 
 /// Choose a device by name; an empty name follows the system default.
@@ -260,6 +273,7 @@ pub fn run() {
                 output: cfg.output.clone(),
                 system_source: cfg.system_source.clone(),
                 mic: cfg.mic.clone(),
+                quality: cfg.quality.as_deref().and_then(aon_core::protocol::Quality::from_name).unwrap_or_default(),
             };
             let engine = Engine::new(cfg.device, name, prefs);
             app.manage(engine.clone());
@@ -302,6 +316,7 @@ pub fn run() {
             set_muted,
             set_send,
             set_hear,
+            set_quality,
             set_device,
             set_reconnect
         ])

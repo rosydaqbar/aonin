@@ -193,6 +193,11 @@ impl Writer {
         true
     }
 
+    /// The block for `seq` is already stored.
+    pub fn has(&self, seq: u32) -> bool {
+        self.shared.has(seq)
+    }
+
     /// Blocks the redundant copy can no longer recover (a packet two or more
     /// blocks newer has arrived) that should be requested now: never asked
     /// for, or asked for `RENACK_AFTER` blocks ago without an answer (the
