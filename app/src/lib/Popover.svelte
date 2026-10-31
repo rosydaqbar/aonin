@@ -81,6 +81,7 @@
       {:else}
         <p class="wait">Waiting for clients. Open Aonin on another device on this network.</p>
       {/each}
+      <button class="btn quiet also" onclick={actions.stopHosting}>stop hosting</button>
     </section>
   {/if}
 
