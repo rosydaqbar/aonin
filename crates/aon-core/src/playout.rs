@@ -432,6 +432,42 @@ mod tests {
         assert!(w.take_nacks().is_empty(), "gives up after MAX_NACKS");
     }
 
+    /// At the default volume the jitter buffer must not change the level:
+    /// a constant stays exactly constant and a tone keeps its peak.
+    #[test]
+    fn unity_gain_keeps_the_level() {
+        for (name, signal) in [
+            ("dc", Box::new(|_: usize| 0.5f32) as Box<dyn Fn(usize) -> f32>),
+            ("tone", Box::new(|i: usize| (i as f32 * 1_000.0 * std::f32::consts::TAU / SAMPLE_RATE as f32).sin() * 0.5)),
+        ] {
+            let (mut w, mut po, stats) = stream(SAMPLE_RATE);
+            assert_eq!(stats.gain(), 1.0);
+            // Blocks arrive one per callback, as live audio does.
+            let block = |s: usize| -> Block { std::array::from_fn(|k| signal(s * BLOCK_FRAMES + k / 2)) };
+            let ahead = START_TARGET / BLOCK_FRAMES + 2;
+            for s in 0..ahead {
+                w.insert(s as u32, &block(s));
+            }
+            let mut peak = 0.0f32;
+            let mut out = vec![[0.0f32; 2]; BLOCK_FRAMES];
+            for n in 0..300 {
+                w.insert((ahead + n) as u32, &block(ahead + n));
+                out.iter_mut().for_each(|f| *f = [0.0; 2]);
+                po.render_add(&mut out);
+                if n > 20 {
+                    for f in &out {
+                        if name == "dc" {
+                            assert!((f[0] - 0.5).abs() < 1e-6 && (f[1] - 0.5).abs() < 1e-6, "dc changed: {f:?}");
+                        }
+                        peak = peak.max(f[0].abs()).max(f[1].abs());
+                    }
+                }
+            }
+            let db = 20.0 * (peak / 0.5).log10();
+            assert!(db.abs() < 0.05, "{name}: level changed by {db:.3} dB");
+        }
+    }
+
     #[test]
     fn finished_after_writer_dropped() {
         let (w, po, _) = stream(SAMPLE_RATE);
