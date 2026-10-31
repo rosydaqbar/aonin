@@ -80,7 +80,7 @@ Run the tests with `cargo test`.
 - [x] Two-way audio: hear the host's audio and mic on a client
 - [x] Never records Aonin's own playback (no echo, no loops)
 - [x] Pick audio devices; recover automatically when the output is unplugged or changes
-- [ ] Open at login
+- [x] Open at login, and an optional "keep Wi-Fi steady" switch on macOS (turns off AWDL)
 - [ ] Signed release builds for Windows and macOS
 
 ## License

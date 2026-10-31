@@ -161,7 +161,7 @@ fn cli_engine(output: Option<String>) -> std::sync::Arc<aon::engine::Engine> {
     use std::hash::{BuildHasher, RandomState};
     let id = RandomState::new().hash_one(std::time::Instant::now()) | 1;
     let name = gethostname::gethostname().to_string_lossy().into_owned();
-    let prefs = aon::engine::Prefs { reconnect: false, last_host: None, output, system_source: None, mic: None, quality: Default::default() };
+    let prefs = aon::engine::Prefs { reconnect: false, last_host: None, output, system_source: None, mic: None, quality: Default::default(), start_at_login: false, quiet_wifi: false };
     aon::engine::Engine::new(id, name, prefs)
 }
 

@@ -12,6 +12,7 @@ use std::time::{Duration, Instant};
 use tauri::image::Image;
 use tauri::tray::{MouseButton, MouseButtonState, TrayIcon, TrayIconBuilder, TrayIconEvent};
 use tauri::{AppHandle, Emitter, Manager, State, WebviewUrl, WebviewWindow, WebviewWindowBuilder, WindowEvent};
+use tauri_plugin_autostart::{MacosLauncher, ManagerExt};
 use tauri_plugin_positioner::{Position, WindowExt};
 
 const POPOVER: &str = "popover";
@@ -33,6 +34,8 @@ struct Config {
     mic: Option<String>,
     #[serde(default)]
     quality: Option<String>,
+    #[serde(default)]
+    quiet_wifi: bool,
 }
 
 fn config_path(app: &AppHandle) -> Option<PathBuf> {
@@ -107,6 +110,40 @@ fn set_send(engine: Eng, source: String, on: bool) {
 #[tauri::command]
 fn set_hear(engine: Eng, source: String, on: bool) -> Result<(), String> {
     engine.set_hear(if source == "mic" { Source::Mic } else { Source::System }, on).map_err(err)
+}
+
+#[tauri::command]
+fn set_start_at_login(app: AppHandle, engine: Eng, on: bool) -> Result<(), String> {
+    let launcher = app.autolaunch();
+    if on { launcher.enable() } else { launcher.disable() }.map_err(err)?;
+    engine.prefs().start_at_login = launcher.is_enabled().unwrap_or(on);
+    Ok(())
+}
+
+/// macOS: AirDrop/Handoff (AWDL) makes Wi-Fi stall every few seconds while
+/// it scans. Turning the awdl0 interface off needs an administrator, so macOS
+/// shows its own password prompt. It stays as set until switched back or the
+/// Mac restarts.
+#[tauri::command]
+fn set_quiet_wifi(app: AppHandle, engine: Eng, on: bool) -> Result<(), String> {
+    #[cfg(target_os = "macos")]
+    {
+        let cmd = if on { "ifconfig awdl0 down" } else { "ifconfig awdl0 up" };
+        let script = format!("do shell script \"{cmd}\" with administrator privileges");
+        let status = std::process::Command::new("osascript").args(["-e", &script]).status().map_err(err)?;
+        if !status.success() {
+            return Err("Wi-Fi setting not changed (the password prompt was cancelled).".into());
+        }
+    }
+    #[cfg(not(target_os = "macos"))]
+    if on {
+        return Err("Only needed on macOS.".into());
+    }
+    engine.prefs().quiet_wifi = on;
+    let mut cfg = load_config(&app);
+    cfg.quiet_wifi = on;
+    save_config(&app, &cfg);
+    Ok(())
 }
 
 /// Lossless, CD, Balanced or Saver for what this device sends.
@@ -263,6 +300,7 @@ pub fn run() {
     tauri::Builder::default()
         .plugin(tauri_plugin_opener::init())
         .plugin(tauri_plugin_positioner::init())
+        .plugin(tauri_plugin_autostart::init(MacosLauncher::LaunchAgent, None))
         .setup(|app| {
             let handle = app.handle();
             let cfg = load_config(handle);
@@ -274,6 +312,8 @@ pub fn run() {
                 system_source: cfg.system_source.clone(),
                 mic: cfg.mic.clone(),
                 quality: cfg.quality.as_deref().and_then(aon_core::protocol::Quality::from_name).unwrap_or_default(),
+                start_at_login: app.autolaunch().is_enabled().unwrap_or(false),
+                quiet_wifi: cfg.quiet_wifi,
             };
             let engine = Engine::new(cfg.device, name, prefs);
             app.manage(engine.clone());
@@ -317,6 +357,8 @@ pub fn run() {
             set_send,
             set_hear,
             set_quality,
+            set_start_at_login,
+            set_quiet_wifi,
             set_device,
             set_reconnect
         ])

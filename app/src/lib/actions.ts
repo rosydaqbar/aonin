@@ -59,6 +59,12 @@ export const actions = {
   async setHear(source: 'system' | 'mic', on: boolean) {
     if (!(await call('set_hear', { source, on })) && app.link) app.link.hear[source] = on;
   },
+  async setStartAtLogin(on: boolean) {
+    if (!(await call('set_start_at_login', { on }))) app.options.startAtLogin = on;
+  },
+  async setQuietWifi(on: boolean) {
+    if (!(await call('set_quiet_wifi', { on }))) app.options.quietWifi = on;
+  },
   async setQuality(quality: 'lossless' | 'cd' | 'balanced' | 'saver') {
     if (!(await call('set_quality', { quality }))) app.quality = quality;
   },

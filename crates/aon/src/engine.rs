@@ -70,6 +70,9 @@ pub struct Prefs {
     pub mic: Option<String>,
     /// What this device sends: Lossless, CD, Balanced or Saver.
     pub quality: Quality,
+    /// Shown in the UI; the desktop shell applies them.
+    pub start_at_login: bool,
+    pub quiet_wifi: bool,
 }
 
 #[derive(Clone, Copy, Debug)]
@@ -735,7 +738,11 @@ impl Engine {
             output_lost,
             stats,
             devices,
-            options: Options { reconnect, start_at_login: false, quiet_wifi: false },
+            options: Options {
+                reconnect,
+                start_at_login: self.prefs.lock().unwrap().start_at_login,
+                quiet_wifi: self.prefs.lock().unwrap().quiet_wifi,
+            },
             error,
         }
     }

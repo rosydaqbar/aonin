@@ -143,7 +143,7 @@
         {/if}
         {#if app.me.os === 'macos'}
           <div class="titlebar"><h2>Wi-Fi</h2></div>
-          <Switch label="Keep Wi-Fi steady while streaming" hint="coming soon · pauses AirDrop and Handoff, which make Mac Wi-Fi stall every few seconds" disabled />
+          <Switch label="Keep Wi-Fi steady" hint="turns off AirDrop and Handoff scanning, which makes Mac Wi-Fi stall every few seconds; asks for your password; back on when you switch this off or restart" checked={app.options.quietWifi} onchange={(on) => actions.setQuietWifi(on)} />
         {/if}
       {:else}
         <div class="titlebar"><h2>Quality</h2><span class="label">for audio this device sends</span></div>
@@ -160,7 +160,7 @@
         </div>
         <div class="titlebar"><h2>Startup</h2></div>
         <Switch label="Reconnect automatically" hint="join the last host as soon as Aonin opens" checked={app.options.reconnect} onchange={(on) => actions.setReconnect(on)} />
-        <Switch label="Open at login" hint="coming soon" disabled />
+        <Switch label="Open at login" hint="start Aonin in the background when you sign in" checked={app.options.startAtLogin} onchange={(on) => actions.setStartAtLogin(on)} />
       {/if}
     </main>
   </div>
