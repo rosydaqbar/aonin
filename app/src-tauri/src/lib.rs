@@ -25,6 +25,8 @@ struct Config {
     /// Random, stable identity of this device on the network.
     device: u64,
     last_host: Option<u64>,
+    #[serde(default)]
+    was_hosting: bool,
     reconnect: Option<bool>,
     #[serde(default)]
     output: Option<String>,
@@ -192,10 +194,11 @@ fn start_poller(app: AppHandle, engine: Arc<Engine>, mut cfg: Config) {
         .spawn(move || loop {
             let snap = engine.tick();
             let _ = app.emit("state", &snap);
-            if engine.last_host() != cfg.last_host {
+            if engine.last_host() != cfg.last_host || engine.was_hosting() != cfg.was_hosting {
                 // Reload first: other settings may have been saved meanwhile.
                 cfg = load_config(&app);
                 cfg.last_host = engine.last_host();
+                cfg.was_hosting = engine.was_hosting();
                 save_config(&app, &cfg);
             }
             std::thread::sleep(Duration::from_millis(100));
@@ -308,6 +311,7 @@ pub fn run() {
             let prefs = Prefs {
                 reconnect: cfg.reconnect.unwrap_or(true),
                 last_host: cfg.last_host,
+                was_hosting: cfg.was_hosting,
                 output: cfg.output.clone(),
                 system_source: cfg.system_source.clone(),
                 mic: cfg.mic.clone(),
@@ -316,6 +320,10 @@ pub fn run() {
                 quiet_wifi: cfg.quiet_wifi,
             };
             let engine = Engine::new(cfg.device, name, prefs);
+            // Pick up the role this device had when Aonin last ran.
+            if cfg.was_hosting {
+                let _ = engine.become_host();
+            }
             app.manage(engine.clone());
             start_poller(handle.clone(), engine, cfg);
             build_popover(handle)?;

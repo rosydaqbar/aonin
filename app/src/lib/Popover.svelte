@@ -1,5 +1,5 @@
 <script lang="ts">
-  import { Mic, MicOff, Monitor, Power } from '@lucide/svelte';
+  import { ChevronDown, Mic, MicOff, Monitor, Power } from '@lucide/svelte';
   import ClientRow from './ClientRow.svelte';
   import StatusMark from './StatusMark.svelte';
   import { app, fmtMs, QUALITY, roleLine } from './state.svelte';
@@ -11,6 +11,29 @@
     : 'var(--strip-ink-2)'
   );
   let idle = $derived(!app.gate && !app.hosting && !app.link);
+
+  // Send/Hear stay folded away until asked for; the choice is remembered here.
+  let showStreams = $state(readShow());
+  function readShow(): boolean {
+    try {
+      return localStorage.getItem('aonin.showStreams') === '1';
+    } catch {
+      return false;
+    }
+  }
+  function toggleStreams() {
+    showStreams = !showStreams;
+    try {
+      localStorage.setItem('aonin.showStreams', showStreams ? '1' : '0');
+    } catch {}
+  }
+  let streamSummary = $derived.by(() => {
+    const l = app.link;
+    if (!l) return '';
+    const send = [l.send.system && 'System audio', l.send.mic ? 'Mic on' : 'Mic off'].filter(Boolean).join(' · ');
+    const hear = [l.hear.system && 'host audio', l.hear.mic && 'host mic'].filter(Boolean).join(' + ');
+    return hear ? `${send} · Hearing ${hear}` : send;
+  });
 </script>
 
 <div class="pop">
@@ -58,7 +81,13 @@
         <span class="name">{app.link.host.name}</span>
         <button class="btn quiet" onclick={actions.disconnect}>Disconnect</button>
       </div>
-      <div class="chips" role="group" aria-label="Streams">
+      <button class="disclose" aria-expanded={showStreams} aria-controls="streams" onclick={toggleStreams}>
+        <span class="label">Streams</span>
+        <span class="summary">{streamSummary}</span>
+        <span class="chev" class:open={showStreams}><ChevronDown size={14} strokeWidth={1.75} /></span>
+      </button>
+      {#if showStreams}
+      <div class="chips" id="streams" role="group" aria-label="Streams">
         <span class="label">Send</span>
         <span class="set">
           <button class="chip" aria-pressed={app.link.send.system} onclick={() => actions.setSend('system', !app.link!.send.system)}><Monitor size={13} strokeWidth={1.75} />System audio</button>
@@ -70,6 +99,7 @@
           <button class="chip" aria-pressed={app.link.hear.mic} onclick={() => actions.setHear('mic', !app.link!.hear.mic)}><Mic size={13} strokeWidth={1.75} />Host mic</button>
         </span>
       </div>
+      {/if}
     </section>
   {/if}
 
@@ -167,6 +197,23 @@
   .head .label:last-child { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
   .host { display: flex; align-items: center; gap: 10px; min-height: var(--row); }
   .host .name { font-weight: 600; flex: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .disclose {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    width: 100%;
+    min-height: 36px;
+    border: 0;
+    border-bottom: 1px solid var(--line);
+    background: transparent;
+    text-align: left;
+  }
+  .disclose[aria-expanded='true'] { border-bottom-color: transparent; }
+  .disclose .summary { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; color: var(--ink-2); font-size: var(--size-s); }
+  .disclose:hover .summary { color: var(--ink); }
+  .chev { display: grid; color: var(--ink-2); transition: transform 160ms cubic-bezier(0.16, 1, 0.3, 1); }
+  .chev.open { transform: rotate(180deg); }
+  @media (prefers-reduced-motion: reduce) { .chev { transition: none; } }
   .chips { display: grid; grid-template-columns: 34px 1fr; align-items: center; gap: 8px 10px; padding: 2px 0 12px; border-bottom: 1px solid var(--line); }
   .set { display: flex; gap: 6px; }
   .chip {

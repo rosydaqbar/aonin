@@ -64,6 +64,8 @@ struct Mix {
 pub struct Prefs {
     pub reconnect: bool,
     pub last_host: Option<u64>,
+    /// This device was hosting when the app last ran; only Stop clears it.
+    pub was_hosting: bool,
     /// Chosen devices by name; `None` follows the system default.
     pub output: Option<String>,
     pub system_source: Option<String>,
@@ -344,7 +346,12 @@ impl Engine {
         }
     }
 
+    pub fn was_hosting(&self) -> bool {
+        self.prefs.lock().unwrap().was_hosting
+    }
+
     pub fn become_host(&self) -> Result<()> {
+        self.prefs.lock().unwrap().was_hosting = true;
         let mut host = self.host.lock().unwrap();
         if host.is_none() {
             *host = Some(self.spawn_hub(DEFAULT_PORT)?);
@@ -381,7 +388,14 @@ impl Engine {
         let _ = h.thread.join();
     }
 
+    /// The user's Stop: also forget that this device hosts.
     pub fn stop_hosting(&self) {
+        self.prefs.lock().unwrap().was_hosting = false;
+        self.close_hub();
+    }
+
+    /// Stop the hub but keep remembering the role (quitting the app).
+    fn close_hub(&self) {
         if let Some(h) = self.host.lock().unwrap().take() {
             Self::stop_hub(h);
         }
@@ -745,9 +759,10 @@ impl Engine {
         }
     }
 
+    /// Quit: stop everything but keep the remembered host and role.
     pub fn shutdown(&self) {
         self.disconnect();
-        self.stop_hosting();
+        self.close_hub();
         self.disco.stop.store(true, Relaxed);
     }
 }
@@ -757,6 +772,30 @@ mod tests {
     use super::*;
     use std::sync::mpsc;
 
+    /// Become host is remembered, quitting keeps it, only Stop forgets it.
+    #[test]
+    fn host_role_is_remembered_until_stop() {
+        let prefs = Prefs {
+            reconnect: false,
+            last_host: None,
+            was_hosting: false,
+            output: None,
+            system_source: None,
+            mic: None,
+            quality: Quality::Lossless,
+            start_at_login: false,
+            quiet_wifi: false,
+        };
+        let engine = Engine::new(2, "test".into(), prefs);
+        engine.become_host().unwrap();
+        assert!(engine.was_hosting());
+        engine.shutdown();
+        assert!(engine.was_hosting(), "quitting keeps the role");
+        engine.become_host().unwrap();
+        engine.stop_hosting();
+        assert!(!engine.was_hosting(), "Stop forgets it");
+    }
+
     /// A lock held across the snapshot once froze the UI: tick must return.
     #[test]
     fn tick_returns_and_never_deadlocks() {
@@ -765,6 +804,7 @@ mod tests {
             let prefs = Prefs {
                 reconnect: true,
                 last_host: None,
+                was_hosting: false,
                 output: None,
                 system_source: None,
                 mic: None,
