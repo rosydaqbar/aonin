@@ -14,7 +14,7 @@ use std::time::Duration;
 use windows::Win32::Foundation::{CloseHandle, WAIT_OBJECT_0};
 use windows::Win32::Media::Audio::*;
 use windows::Win32::System::Com::StructuredStorage::PROPVARIANT;
-use windows::Win32::System::Com::{BLOB, COINIT_MULTITHREADED, CoInitializeEx, CoUninitialize, IAgileObject, IAgileObject_Impl};
+use windows::Win32::System::Com::{COINIT_MULTITHREADED, CoInitializeEx, CoUninitialize};
 use windows::Win32::System::Threading::{CreateEventW, GetCurrentProcessId, WaitForSingleObject};
 use windows::Win32::System::Variant::VT_BLOB;
 use windows::core::{HRESULT, IUnknown, Interface, Ref, implement};
@@ -23,7 +23,9 @@ use windows::core::{HRESULT, IUnknown, Interface, Ref, implement};
 pub const RATE: u32 = 48_000;
 const WAVE_FORMAT_IEEE_FLOAT: u16 = 3;
 
-#[implement(IActivateAudioInterfaceCompletionHandler, IAgileObject)]
+// `implement` already makes the object agile (IAgileObject + free-threaded
+// marshaling); listing IAgileObject again corrupted the heap on release.
+#[implement(IActivateAudioInterfaceCompletionHandler)]
 struct Activated(mpsc::Sender<()>);
 
 impl IActivateAudioInterfaceCompletionHandler_Impl for Activated_Impl {
@@ -33,7 +35,18 @@ impl IActivateAudioInterfaceCompletionHandler_Impl for Activated_Impl {
     }
 }
 
-impl IAgileObject_Impl for Activated_Impl {}
+/// The VT_BLOB form of a PROPVARIANT, laid out as Windows defines it
+/// (24 bytes on 64-bit). Built by hand: filling the windows-rs PROPVARIANT
+/// union corrupted the heap when the capture stopped.
+#[repr(C)]
+struct BlobVariant {
+    vt: u16,
+    reserved: [u16; 3],
+    size: u32,
+    data: *const u8,
+}
+
+const _: () = assert!(size_of::<BlobVariant>() == size_of::<PROPVARIANT>());
 
 /// Keeps the capture thread alive; dropping it stops the capture.
 pub struct Capture {
@@ -94,19 +107,16 @@ unsafe fn capture(tx: &mut Producer<f32>, stop: &AtomicBool, ready: &mpsc::Sende
             },
         };
         // A VT_BLOB pointing at `params`, which outlives the activation.
-        let mut pv = PROPVARIANT::default();
-        {
-            let inner = &mut *pv.Anonymous.Anonymous;
-            inner.vt = VT_BLOB;
-            inner.Anonymous.blob = BLOB {
-                cbSize: size_of::<AUDIOCLIENT_ACTIVATION_PARAMS>() as u32,
-                pBlobData: &params as *const _ as *mut u8,
-            };
-        }
+        let pv = BlobVariant {
+            vt: VT_BLOB.0,
+            reserved: [0; 3],
+            size: size_of::<AUDIOCLIENT_ACTIVATION_PARAMS>() as u32,
+            data: &params as *const _ as *const u8,
+        };
 
         let (done_tx, done_rx) = mpsc::channel();
         let handler: IActivateAudioInterfaceCompletionHandler = Activated(done_tx).into();
-        let op = ActivateAudioInterfaceAsync(VIRTUAL_AUDIO_DEVICE_PROCESS_LOOPBACK, &IAudioClient::IID, Some(&pv), &handler)?;
+        let op = ActivateAudioInterfaceAsync(VIRTUAL_AUDIO_DEVICE_PROCESS_LOOPBACK, &IAudioClient::IID, Some(&pv as *const BlobVariant as *const PROPVARIANT), &handler)?;
         done_rx.recv_timeout(Duration::from_secs(5)).map_err(|_| anyhow!("process loopback activation timed out"))?;
         let mut hr = HRESULT(0);
         let mut unknown: Option<IUnknown> = None;
@@ -178,5 +188,19 @@ unsafe fn capture(tx: &mut Producer<f32>, stop: &AtomicBool, ready: &mpsc::Sende
         let _ = client.Stop();
         let _ = CloseHandle(event);
         result
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    /// Disconnecting stops the capture; the process must survive it.
+    #[test]
+    fn start_and_stop_cleanly() {
+        for _ in 0..3 {
+            let (capture, _rx, rate) = super::start().expect("process loopback");
+            assert_eq!(rate, super::RATE);
+            std::thread::sleep(std::time::Duration::from_millis(300));
+            drop(capture);
+        }
     }
 }

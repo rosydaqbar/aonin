@@ -17,6 +17,9 @@
   <header class="strip">
     <span class="me" title={app.me.name}>{app.me.name}</span>
     <span class="role"><i style:background={dot}></i>{roleLine(app)}</span>
+    {#if app.hosting}
+      <button class="stop" onclick={actions.stopHosting}>stop</button>
+    {/if}
   </header>
 
   {#if app.error}
@@ -81,7 +84,6 @@
       {:else}
         <p class="wait">Waiting for clients. Open Aonin on another device on this network.</p>
       {/each}
-      <button class="btn quiet also" onclick={actions.stopHosting}>stop hosting</button>
     </section>
   {/if}
 
@@ -144,6 +146,18 @@
     text-overflow: ellipsis;
   }
   .role i { width: 8px; height: 8px; border-radius: 50%; flex: none; }
+  .stop {
+    flex: none;
+    height: 24px;
+    padding: 0 10px;
+    border-radius: 12px;
+    border: 1px solid var(--strip-ink-2);
+    background: transparent;
+    color: var(--strip-ink);
+    font-size: var(--size-s);
+    letter-spacing: 0.04em;
+  }
+  .stop:hover { background: var(--strip-ink); color: var(--strip); }
   .alert { margin: 12px 16px 0; padding: 9px 12px; border-radius: 8px; background: var(--red-wash); color: var(--ink); }
   .solo { padding: 28px 16px 26px; display: flex; flex-direction: column; align-items: flex-start; gap: 14px; }
   .solo p { font-weight: 600; }
