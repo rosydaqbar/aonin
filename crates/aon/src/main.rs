@@ -62,6 +62,13 @@ enum Cmd {
         /// Seconds to stay connected.
         #[arg(long, default_value_t = 30)]
         seconds: u64,
+        /// Testing: turn auto-reconnect on, as the app does.
+        #[arg(long)]
+        reconnect: bool,
+        /// Testing: disconnect (as the app's button does) after this many
+        /// seconds, then keep reporting until --seconds.
+        #[arg(long)]
+        disconnect_after: Option<u64>,
     },
     /// Stream this machine's audio to a hub.
     Send {
@@ -96,8 +103,9 @@ fn main() -> Result<()> {
                 println!("{}", engine.tick().summary());
             }
         }
-        Cmd::Join { name, hear_system, hear_mic, no_send, output, seconds } => {
+        Cmd::Join { name, hear_system, hear_mic, no_send, output, seconds, reconnect, disconnect_after } => {
             let engine = cli_engine(output);
+            engine.set_reconnect(reconnect);
             let want = name.map(|n| n.to_lowercase());
             let deadline = std::time::Instant::now() + std::time::Duration::from_secs(10);
             let host = loop {
@@ -122,8 +130,15 @@ fn main() -> Result<()> {
             if hear_mic {
                 engine.set_hear(aon_core::protocol::Source::Mic, true)?;
             }
-            for _ in 0..seconds / 2 {
-                std::thread::sleep(std::time::Duration::from_secs(2));
+            let start = std::time::Instant::now();
+            let mut disconnected = false;
+            while start.elapsed().as_secs() < seconds {
+                std::thread::sleep(std::time::Duration::from_secs(1));
+                if !disconnected && disconnect_after.is_some_and(|d| start.elapsed().as_secs() >= d) {
+                    println!("-- disconnect");
+                    engine.forget_host();
+                    disconnected = true;
+                }
                 println!("{}", engine.tick().summary());
             }
             engine.shutdown();

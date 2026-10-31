@@ -526,9 +526,11 @@ impl Engine {
     }
 
     /// The user's explicit disconnect also stops auto-reconnect to that host.
+    /// Forget first: disconnecting takes a moment (senders wind down), and a
+    /// tick in between would otherwise reconnect straight away.
     pub fn forget_host(&self) {
-        self.disconnect();
         self.prefs.lock().unwrap().last_host = None;
+        self.disconnect();
     }
 
     pub fn set_send(&self, source: Source, on: bool) {

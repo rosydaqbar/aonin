@@ -71,22 +71,22 @@ fn parse_host(id: &str) -> Result<u64, String> {
     engine::parse_id(id).ok_or_else(|| "unknown host".to_string())
 }
 
-#[tauri::command]
+#[tauri::command(async)]
 fn become_host(engine: Eng) -> Result<(), String> {
     engine.become_host().map_err(err)
 }
 
-#[tauri::command]
+#[tauri::command(async)]
 fn stop_hosting(engine: Eng) {
     engine.stop_hosting();
 }
 
-#[tauri::command]
+#[tauri::command(async)]
 fn connect(engine: Eng, host_id: String) -> Result<(), String> {
     engine.connect(parse_host(&host_id)?).map_err(err)
 }
 
-#[tauri::command]
+#[tauri::command(async)]
 fn disconnect(engine: Eng) {
     engine.forget_host();
 }
@@ -101,13 +101,13 @@ fn set_muted(engine: Eng, client: String, muted: bool) {
     engine.set_muted(&client, muted);
 }
 
-#[tauri::command]
+#[tauri::command(async)]
 fn set_send(engine: Eng, source: String, on: bool) {
     engine.set_send(if source == "mic" { Source::Mic } else { Source::System }, on);
 }
 
 /// Ask the host to stream its own audio ("system") or mic back to us.
-#[tauri::command]
+#[tauri::command(async)]
 fn set_hear(engine: Eng, source: String, on: bool) -> Result<(), String> {
     engine.set_hear(if source == "mic" { Source::Mic } else { Source::System }, on).map_err(err)
 }
@@ -147,7 +147,7 @@ fn set_quiet_wifi(app: AppHandle, engine: Eng, on: bool) -> Result<(), String> {
 }
 
 /// Lossless, CD, Balanced or Saver for what this device sends.
-#[tauri::command]
+#[tauri::command(async)]
 fn set_quality(app: AppHandle, engine: Eng, quality: String) -> Result<(), String> {
     let q = aon_core::protocol::Quality::from_name(&quality).ok_or("unknown quality")?;
     engine.set_quality(q);
@@ -158,7 +158,7 @@ fn set_quality(app: AppHandle, engine: Eng, quality: String) -> Result<(), Strin
 }
 
 /// Choose a device by name; an empty name follows the system default.
-#[tauri::command]
+#[tauri::command(async)]
 fn set_device(app: AppHandle, engine: Eng, role: String, name: String) {
     let name = (!name.is_empty()).then_some(name);
     let role = match role.as_str() {
