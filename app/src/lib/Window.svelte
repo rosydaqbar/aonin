@@ -63,7 +63,7 @@
           </div>
           {#if app.hosting.clients.length}
             <div class="cols label"><span></span><span>Device</span><span>Level</span><span class="r">Latency</span><span>Volume</span><span></span></div>
-            {#each app.hosting.clients as row (row.id)}<ClientRow {row} wide />{/each}
+            {#each app.hosting.clients as row (row.id)}<ClientRow {row} wide lost={app.outputLost} />{/each}
           {:else}
             <p class="empty">Waiting for clients. Open Aonin on another device on this network and it will appear here.</p>
           {/if}
@@ -109,7 +109,7 @@
                 <span class="name">{h.name}</span>
                 <span class="label" class:bad={h.blocked}>{h.blocked ?? `Hosting · ${h.clients} ${h.clients === 1 ? 'client' : 'clients'}`}</span>
               </div>
-              <button class="btn" disabled={!!h.blocked} onclick={() => actions.connect(h.id)}>{h.blocked ? "Can't join" : 'Connect'}</button>
+              {#if !h.blocked}<button class="btn" onclick={() => actions.connect(h.id)}>Connect</button>{/if}
             </div>
           {/each}
         {/if}
@@ -139,10 +139,17 @@
         <div class="titlebar"><h2>Connection health</h2></div>
         {#if app.stats.length}
           <table>
-            <thead><tr class="label"><th>Device</th><th>Buffer</th><th>Repaired</th><th>Covered gaps</th><th>Dropouts</th></tr></thead>
+            <thead><tr class="label"><th></th><th>Device</th><th class="r">Latency</th><th class="r">Repaired</th><th class="r">Covered gaps</th><th class="r">Dropouts</th></tr></thead>
             <tbody>
               {#each app.stats as s}
-                <tr><td>{s.name}</td><td class="num">{fmtMs(s.bufferMs)} <span class="label">of {fmtMs(s.targetMs)}</span></td><td class="num">{s.recovered}</td><td class="num">{s.concealed}</td><td class="num">{s.dropouts}</td></tr>
+                <tr>
+                  <td class="dot"><StatusMark mark={s.dropouts > 0 ? 'error' : s.concealed > 0 ? 'degraded' : 'live'} /></td>
+                  <td>{s.name}</td>
+                  <td class="num r">{fmtMs(s.bufferMs)} <span class="label">target {fmtMs(s.targetMs)}</span></td>
+                  <td class="num r">{s.recovered}</td>
+                  <td class="num r" class:warnc={s.concealed > 0}>{s.concealed}</td>
+                  <td class="num r" class:badc={s.dropouts > 0}>{s.dropouts}</td>
+                </tr>
               {/each}
             </tbody>
           </table>
@@ -189,8 +196,8 @@
   .body { display: grid; grid-template-columns: 172px 1fr; min-height: 0; }
   nav { border-right: 1px solid var(--line); padding: 16px 10px; display: flex; flex-direction: column; gap: 2px; }
   nav a { padding: 8px 10px; border-radius: 6px; color: var(--ink); text-decoration: none; }
-  nav a:hover { background: var(--recess); }
-  nav a[aria-current='page'] { background: var(--recess); font-weight: 700; }
+  nav a:hover { color: var(--ink); background: color-mix(in srgb, var(--recess) 50%, transparent); }
+  nav a[aria-current='page'] { background: var(--raised); font-weight: 700; box-shadow: 0 1px 2px rgb(0 0 0 / 0.08); }
   .quit {
     margin-top: auto;
     display: flex;
@@ -212,7 +219,7 @@
   .titlebar .label { margin-left: auto; }
   .titlebar .label + .btn { margin-left: 0; }
   .titlebar h2 + .btn { margin-left: auto; }
-  .cols { display: grid; grid-template-columns: 8px minmax(0, 1fr) 159px 64px 132px 64px; gap: 16px; padding-bottom: 6px; border-bottom: 1px solid var(--line); }
+  .cols { display: grid; grid-template-columns: 8px minmax(180px, 1fr) 105px 64px 132px 72px; gap: 16px; padding-bottom: 6px; border-bottom: 1px solid var(--line); }
   .r { text-align: right; }
   .empty { color: var(--ink-2); padding: 14px 0; }
   .alert { margin-top: 16px; padding: 10px 12px; border-radius: 8px; background: var(--red-wash); }
@@ -238,7 +245,11 @@
   table { width: 100%; border-collapse: collapse; }
   th { text-align: left; font-weight: 400; padding: 0 0 6px; border-bottom: 1px solid var(--line); }
   td { padding: 0; height: 44px; border-bottom: 1px solid var(--line); }
-  td:first-child { font-weight: 600; }
+  td:nth-child(2) { font-weight: 600; }
+  td.dot, th:first-child { width: 20px; }
+  th.r, td.r { text-align: right; }
+  .warnc { color: var(--yellow-ink); font-weight: 600; }
+  .badc { color: var(--red); font-weight: 600; }
   .legend { display: grid; grid-template-columns: 110px 1fr; gap: 6px 16px; margin-top: 16px; max-width: 620px; color: var(--ink-2); }
   .legend dt { color: var(--ink); font-weight: 600; }
   .radios { border-top: 1px solid var(--line); }

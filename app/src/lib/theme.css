@@ -15,7 +15,7 @@
   --ink-2: #646462;
   --line: #d5d5d3;
   --line-strong: #bbbbb9;
-  --hole: #d8d8d6;
+  --hole: #bdbdbb;
   --hole-fill: #2a2a2a;
   --orange: #e8601c;
   --orange-ink: #b8490f;
@@ -47,7 +47,7 @@
     --ink-2: #a2a2a0;
     --line: #353535;
     --line-strong: #484847;
-    --hole: #333333;
+    --hole: #4a4a4a;
     --hole-fill: #e9e9e7;
     --orange: #f07a3a;
     --orange-ink: #f39260;
@@ -73,7 +73,7 @@
   --ink-2: #a2a2a0;
   --line: #353535;
   --line-strong: #484847;
-  --hole: #333333;
+  --hole: #4a4a4a;
   --hole-fill: #e9e9e7;
   --orange: #f07a3a;
   --orange-ink: #f39260;

@@ -45,6 +45,11 @@ jobs:
         uses: tauri-apps/tauri-action@v0
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          # macOS signing and notarization, once there is an Apple Developer ID:
+          # add repository secrets APPLE_CERTIFICATE, APPLE_CERTIFICATE_PASSWORD,
+          # APPLE_SIGNING_IDENTITY, APPLE_ID, APPLE_PASSWORD and APPLE_TEAM_ID,
+          # and pass each here as  NAME: ${{ secrets.NAME }}. Left out until then,
+          # because empty values would make the bundler attempt to sign.
         with:
           projectPath: app
           tagName: ${{ github.ref_type == 'tag' && github.ref_name || '' }}

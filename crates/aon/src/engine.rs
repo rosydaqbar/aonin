@@ -170,6 +170,8 @@ struct Link {
     hear: Sends,
     /// What comes back from the host: meter level and buffer depth.
     hear_level: f32,
+    /// Level of what this device is sending, for the client's meter.
+    send_level: f32,
     hear_latency_ms: f32,
 }
 
@@ -669,7 +671,7 @@ impl Engine {
             name: p.advert.name.clone(),
             os: if p.advert.macos { "macos" } else { "windows" },
             clients: p.advert.clients,
-            blocked: sources.contains(&p.advert.id).then(|| "Already sends its audio to this device.".to_string()),
+            blocked: sources.contains(&p.advert.id).then(|| "Joining would play your own audio back to you.".to_string()),
         };
         let hosts: Vec<HostInfo> = peers.iter().filter(|p| p.advert.hosting).map(host_info).collect();
 
@@ -708,6 +710,7 @@ impl Engine {
                 });
             let latency = runs.iter().flatten().map(|r| r.shared.buffer_ms.get()).fold(0.0, f32::max);
             let fresh = peers.iter().find(|p| p.advert.id == l.host);
+            let send_level = runs.iter().flatten().map(|r| meter(r.shared.peak.take())).fold(0.0, f32::max);
             let (hear_level, hear_latency_ms) = l.back.as_ref().map_or((0.0, 0.0), |b| {
                 let streams = b.shared.streams.lock().unwrap();
                 streams.iter().fold((0.0f32, 0.0f32), |(lvl, lat), st| (lvl.max(meter(st.peak)), lat.max(st.stats.latency_ms())))
@@ -725,6 +728,7 @@ impl Engine {
                 send: Sends { system: l.system.is_some(), mic: l.mic.is_some() },
                 hear: l.hear,
                 hear_level,
+                send_level,
                 hear_latency_ms,
             }
         });

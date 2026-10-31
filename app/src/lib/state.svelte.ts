@@ -40,6 +40,8 @@ export interface Link {
   hear: { system: boolean; mic: boolean };
   /** What comes back from the host: meter level 0..1 and buffer depth. */
   hearLevel?: number;
+  /** Level of what this device sends, 0..1. */
+  sendLevel?: number;
   hearLatencyMs?: number;
 }
 
@@ -109,7 +111,7 @@ const pcStudio: HostInfo = { id: 'h1', name: 'PC-Studio', os: 'windows', clients
 export const DEMOS: Record<string, Partial<AppState>> = {
   host: {
     hosting: { output: 'USB DAC', clients },
-    hosts: [{ id: 'h2', name: 'Studio iMac', os: 'macos', clients: 1, blocked: 'Its audio already comes from this PC.' }],
+    hosts: [{ id: 'h2', name: 'Studio iMac', os: 'macos', clients: 1, blocked: 'Joining would play your own audio back to you.' }],
     stats: [
       { name: "Studio MacBook Pro", bufferMs: 21.8, targetMs: 20, recovered: 4, concealed: 0, dropouts: 0 },
       { name: 'Office MacBook', bufferMs: 24.1, targetMs: 23, recovered: 11, concealed: 0, dropouts: 1 },
@@ -119,7 +121,7 @@ export const DEMOS: Record<string, Partial<AppState>> = {
   waiting: { hosting: { output: 'USB DAC', clients: [] } },
   client: {
     me: { name: 'Office MacBook', os: 'macos' },
-    link: { host: pcStudio, status: 'connected', latencyMs: 24.1, send: { system: true, mic: false }, hear: { system: false, mic: true } },
+    link: { host: pcStudio, status: 'connected', latencyMs: 24.1, send: { system: true, mic: false }, hear: { system: false, mic: true }, sendLevel: 0.55 },
     hosts: [pcStudio, { id: 'h3', name: 'Living Room PC', os: 'windows', clients: 0 }],
     stats: [{ name: 'PC-Studio', bufferMs: 24.1, targetMs: 23, recovered: 11, concealed: 0, dropouts: 1 }],
   },
@@ -136,7 +138,7 @@ export const DEMOS: Record<string, Partial<AppState>> = {
   },
   found: {
     me: { name: 'Work Laptop', os: 'windows' },
-    hosts: [pcStudio, { id: 'h2', name: 'Studio iMac', os: 'macos', clients: 1, blocked: 'Its audio already comes from this laptop.' }],
+    hosts: [pcStudio, { id: 'h2', name: 'Studio iMac', os: 'macos', clients: 1, blocked: 'Joining would play your own audio back to you.' }],
   },
   empty: { me: { name: 'Work Laptop', os: 'windows' } },
   permission: { me: { name: 'Office MacBook', os: 'macos' }, gate: 'permission' },
@@ -182,12 +184,13 @@ export async function followBackend() {
 /** A device reads as "connected somewhere" in the strip. */
 export function roleLine(s: AppState): string {
   if (s.gate) return 'Setup needed';
-  if (s.hosting && s.link) return `Hosting · also sending to ${s.link.host.name}`;
+  if (s.hosting && s.outputLost) return 'Output lost';
+  if (s.hosting && s.link) return 'Hosting · also connected';
   if (s.hosting) {
     const n = s.hosting.clients.length;
     return n === 0 ? 'Hosting · no clients yet' : `Hosting · ${n} ${n === 1 ? 'client' : 'clients'}`;
   }
-  if (s.link) return s.link.status === 'connected' ? `Sending to ${s.link.host.name}` : `Reconnecting to ${s.link.host.name}`;
+  if (s.link) return s.link.status === 'connected' ? 'Connected' : 'Reconnecting…';
   return 'Not connected';
 }
 

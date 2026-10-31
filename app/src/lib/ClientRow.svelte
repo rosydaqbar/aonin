@@ -5,33 +5,33 @@
   import { fmtMs, type ClientRow } from './state.svelte';
   import { actions } from './actions';
 
-  let { row, wide = false }: { row: ClientRow; wide?: boolean } = $props();
+  /** `lost`: the host's output device is gone, so nothing is actually playing. */
+  let { row, wide = false, lost = false }: { row: ClientRow; wide?: boolean; lost?: boolean } = $props();
 
   let what = $derived(
     row.mark === 'connecting'
       ? 'Connecting…'
       : [row.sends.system && 'System audio', row.sends.mic && 'mic'].filter(Boolean).join(' + ')
   );
-  let health = $derived(
-    row.mark === 'muted' ? 'Muted'
-    : row.mark === 'connecting' ? 'Connecting…'
-    : fmtMs(row.latencyMs)
-  );
+  // Muting never hides whether the device is still connected and healthy.
+  let latency = $derived(row.mark === 'connecting' ? 'Connecting…' : fmtMs(row.latencyMs));
+  let health = $derived(row.muted ? `Muted · ${latency}` : latency);
   let note = $derived(row.mark !== 'degraded' ? null : wide ? `Unstable · ${row.recovered} repaired` : 'Unstable');
+  let mark = $derived(lost ? 'connecting' : row.muted ? 'muted' : row.mark);
 </script>
 
 <div class="row" class:wide>
-  <StatusMark mark={row.muted ? 'muted' : row.mark} />
+  <StatusMark {mark} />
   <div class="who">
     <span class="name" title={row.name}>{row.name}</span>
     {#if wide}
-      <span class="label">{note ?? what}</span>
+      <span class="label">{row.muted ? `Muted · ${what}` : (note ?? what)}</span>
     {:else}
       <span class="label num" class:warn={row.mark === 'degraded'}>{note ?? health}</span>
     {/if}
   </div>
-  <Grille level={row.level} recovered={row.recovered} holes={wide ? 18 : 10} muted={row.muted} />
-  {#if wide}<span class="num lat" class:warn={row.mark === 'degraded'}>{health}</span>{/if}
+  <Grille level={row.level} recovered={row.recovered} holes={wide ? 12 : 8} muted={row.muted || lost} />
+  {#if wide}<span class="num lat" class:warn={row.mark === 'degraded'}>{latency}</span>{/if}
   <input
     type="range"
     min="0"
@@ -45,7 +45,7 @@
   />
   {#if wide}
     <button class="btn" class:dark={row.muted} onclick={() => actions.setMuted(row.id, !row.muted)} aria-pressed={row.muted}>
-      {row.muted ? 'Muted' : 'Mute'}
+      {row.muted ? 'Unmute' : 'Mute'}
     </button>
   {:else}
     <button
@@ -70,7 +70,7 @@
     border-bottom: 1px solid var(--line);
   }
   .row.wide {
-    grid-template-columns: 8px minmax(0, 1fr) auto 64px 132px 64px;
+    grid-template-columns: 8px minmax(180px, 1fr) auto 64px 132px 72px;
     gap: 16px;
     min-height: 52px;
   }

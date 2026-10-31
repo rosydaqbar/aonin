@@ -1,12 +1,14 @@
 <script lang="ts">
-  import { ChevronDown, Mic, MicOff, Monitor, Power } from '@lucide/svelte';
+  import { ChevronDown, ChevronRight, Mic, MicOff, Monitor, Power } from '@lucide/svelte';
   import ClientRow from './ClientRow.svelte';
+  import Grille from './Grille.svelte';
   import StatusMark from './StatusMark.svelte';
   import { app, fmtMs, QUALITY, roleLine } from './state.svelte';
   import { actions } from './actions';
 
   let dot = $derived(
-    app.hosting ? 'var(--orange)'
+    app.hosting && app.outputLost ? 'var(--red)'
+    : app.hosting ? 'var(--orange)'
     : app.link?.status === 'connected' ? 'var(--green)'
     : 'var(--strip-ink-2)'
   );
@@ -41,7 +43,7 @@
     <span class="me" title={app.me.name}>{app.me.name}</span>
     <span class="role"><i style:background={dot}></i>{roleLine(app)}</span>
     {#if app.hosting}
-      <button class="stop" onclick={actions.stopHosting}>Stop</button>
+      <button class="stop" onclick={actions.stopHosting}>{app.link ? 'Stop hosting' : 'Stop'}</button>
     {/if}
   </header>
 
@@ -49,8 +51,11 @@
     <p class="alert" role="alert">{app.error}</p>
   {/if}
 
-  {#if app.outputLost}
-    <p class="alert" role="status">Output device disconnected. Reconnecting when it's back…</p>
+  {#if app.outputLost && app.hosting}
+    <div class="alert lost" role="status">
+      <p>{app.hosting.output} was disconnected. Playing again when it's back.</p>
+      <button class="btn" onclick={() => actions.openWindow('audio')}>Choose output</button>
+    </div>
   {/if}
 
   {#if app.gate === 'permission'}
@@ -79,7 +84,8 @@
       <div class="host">
         <StatusMark mark={app.link.status === 'connected' ? 'live' : 'connecting'} />
         <span class="name">{app.link.host.name}</span>
-        <button class="btn quiet" onclick={actions.disconnect}>Disconnect</button>
+        <Grille level={app.link.sendLevel ?? 0} holes={8} muted={!app.link.send.system && !app.link.send.mic} />
+        <button class="btn" onclick={actions.disconnect}>Disconnect</button>
       </div>
       <button class="disclose" aria-expanded={showStreams} aria-controls="streams" onclick={toggleStreams}>
         <span class="label">Streams</span>
@@ -107,10 +113,10 @@
     <section class="block">
       <div class="head">
         <span class="label">Clients</span>
-        <span class="label" title="Output">To {app.hosting.output}</span>
+        <span class="label" title="Output">{app.outputLost ? 'No output' : `To ${app.hosting.output}`}</span>
       </div>
       {#each app.hosting.clients as row (row.id)}
-        <ClientRow {row} />
+        <ClientRow {row} lost={app.outputLost} />
       {:else}
         <p class="wait">Waiting for clients. Open Aonin on another device on this network.</p>
       {/each}
@@ -127,9 +133,9 @@
             <span class="name">{h.name}</span>
             <span class="label">{h.blocked ?? `${h.clients} ${h.clients === 1 ? 'client' : 'clients'}`}</span>
           </div>
-          <button class="btn" disabled={!!h.blocked} onclick={() => actions.connect(h.id)}>
-            {h.blocked ? "Can't join" : 'Connect'}
-          </button>
+          {#if !h.blocked}
+            <button class="btn" onclick={() => actions.connect(h.id)}>Connect</button>
+          {/if}
         </div>
       {/each}
       <button class="btn quiet also" onclick={actions.becomeHost}>Or become host instead</button>
@@ -137,7 +143,7 @@
   {/if}
 
   <footer>
-    <button class="btn quiet" onclick={() => actions.openWindow('advanced')}>{QUALITY[app.quality].label} · {QUALITY[app.quality].detail.split(',')[0]}</button>
+    <button class="btn quiet quality" onclick={() => actions.openWindow('advanced')}>{QUALITY[app.quality].label} · {QUALITY[app.quality].detail.split(',')[0]}<ChevronRight size={12} strokeWidth={1.75} /></button>
     <span class="spacer"></span>
     <button class="btn quiet" onclick={() => actions.openWindow('devices')}>Open Aonin</button>
     <button class="icon" onclick={actions.quit} aria-label="Quit Aonin"><Power size={14} strokeWidth={1.75} /></button>
@@ -162,7 +168,7 @@
     align-items: center;
     gap: 12px;
   }
-  .me { font-weight: 700; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; min-width: 0; }
+  .me { font-weight: 700; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; flex: 0 1 auto; min-width: 64px; }
   .role {
     margin-left: auto;
     display: flex;
@@ -189,6 +195,9 @@
   }
   .stop:hover { background: var(--strip-ink); color: var(--strip); }
   .alert { margin: 12px 16px 0; padding: 9px 12px; border-radius: 8px; background: var(--red-wash); color: var(--ink); }
+  .alert.lost { display: flex; flex-direction: column; align-items: flex-start; gap: 8px; }
+  .quality { color: var(--ink-2); }
+  .quality:hover { color: var(--ink); }
   .solo { padding: 28px 16px 26px; display: flex; flex-direction: column; align-items: flex-start; gap: 14px; }
   .solo p { font-weight: 600; }
   .block { padding: 14px 16px 4px; }
@@ -249,7 +258,7 @@
     display: flex;
     align-items: center;
     gap: 2px;
-    padding: 8px 10px;
+    padding: 8px 2px;
     background: var(--recess);
     border-top: 1px solid var(--line);
   }

@@ -30,6 +30,15 @@ Aonin joins the audio of computers on the same local network into one output. On
 - **Windows Firewall** asks once to allow incoming connections the first time a machine hosts.
 - For the steadiest Wi-Fi on a Mac, AirDrop/Handoff (AWDL) can cause short stalls; the adaptive buffer absorbs them at the cost of a few ms.
 
+## Installing
+
+Download the installer for your system from [Releases](https://github.com/rosydaqbar/aonin/releases).
+
+The builds are not code-signed yet, so the first launch needs one extra step:
+
+- **Windows:** SmartScreen may say "Windows protected your PC". Click **More info**, then **Run anyway**. Choose "install for all users" to have the installer allow Aonin through Windows Firewall.
+- **macOS:** open the DMG and drag Aonin to Applications. If macOS says it can't be opened, right-click Aonin in Applications and choose **Open**, or run `xattr -cr /Applications/Aonin.app`. Then allow audio recording when asked.
+
 ## Building from source
 
 Requirements:
@@ -81,7 +90,8 @@ Run the tests with `cargo test`.
 - [x] Never records Aonin's own playback (no echo, no loops)
 - [x] Pick audio devices; recover automatically when the output is unplugged or changes
 - [x] Open at login, and an optional "keep Wi-Fi steady" switch on macOS (turns off AWDL)
-- [ ] Signed release builds for Windows and macOS
+- [x] Installers built by GitHub Actions (Windows NSIS, macOS DMG)
+- [ ] Code signing: Windows (e.g. SignPath for open source) and macOS (Apple Developer ID + notarization)
 
 ## License
 
