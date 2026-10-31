@@ -2,10 +2,10 @@
 //! set and publish what the UI needs through a shared struct.
 
 use anyhow::Result;
-use aon_core::playout::{self, Playout, StreamStats};
+use crate::audio;
+use aon_core::playout::{self, StreamStats};
 use aon_core::protocol::{self, BLOCK_SAMPLES, Block, MAX_PACKET_BYTES, Os, Packet, SAMPLE_RATE, Source};
 use aon_core::resample::Resampler;
-use crossbeam_channel::Sender;
 use rtrb::Consumer;
 use std::collections::{HashMap, VecDeque};
 use std::hash::{BuildHasher, RandomState};
@@ -245,6 +245,12 @@ pub struct StreamView {
 pub struct HubShared {
     pub stop: AtomicBool,
     pub streams: Mutex<Vec<StreamView>>,
+    /// The output device is gone and the hub is waiting to reopen it.
+    pub output_lost: AtomicBool,
+    /// Name of the device currently playing the mix.
+    pub output: Mutex<String>,
+    /// Ask the hub to reopen its output (e.g. the user picked another device).
+    pub reopen: AtomicBool,
 }
 
 struct Incoming {
@@ -279,7 +285,29 @@ pub fn dbfs(peak: f32) -> String {
     if peak > 0.0 { format!("{:.1} dBFS", 20.0 * peak.log10()) } else { "silent".into() }
 }
 
-pub fn run_hub(port: u16, new_stream: Sender<Playout>, out_rate: u32, shared: &HubShared, verbose: bool) -> Result<()> {
+/// Give an incoming stream a fresh jitter buffer playing on `output`.
+fn attach(src: &mut Incoming, output: Option<&audio::Output>) {
+    let rate = output.map_or(SAMPLE_RATE, |o| o.rate);
+    let (writer, po, stats) = playout::stream(rate);
+    stats.gap.store(src.stats.gap.load(Relaxed), Relaxed);
+    stats.set_gain(src.stats.gain());
+    if let Some(o) = output {
+        let _ = o.tx.send(po);
+    }
+    src.writer = writer;
+    src.stats = stats;
+}
+
+/// Run the hub until `shared.stop`. `open` opens the output; it is called
+/// again whenever the device fails, `shared.reopen` is set, or, with
+/// `follow_default`, the system default output changes.
+pub fn run_hub(
+    port: u16,
+    mut open: impl FnMut() -> Result<audio::Output>,
+    follow_default: bool,
+    shared: &HubShared,
+    verbose: bool,
+) -> Result<()> {
     let sock = UdpSocket::bind(("0.0.0.0", port))?;
     sock.set_read_timeout(Some(Duration::from_millis(5)))?;
     if verbose {
@@ -292,23 +320,57 @@ pub fn run_hub(port: u16, new_stream: Sender<Playout>, out_rate: u32, shared: &H
     let mut report = Instant::now();
     let mut publish = Instant::now();
     let mut status = Instant::now();
+    let mut output: Option<audio::Output> = None;
+    let mut retry_at = Instant::now();
+    let mut default_check = Instant::now();
 
-    let join = |sources: &mut HashMap<(SocketAddr, u32), Incoming>, addr: SocketAddr, stream: u32| {
+    let join = |sources: &mut HashMap<(SocketAddr, u32), Incoming>, addr: SocketAddr, stream: u32, output: Option<&audio::Output>| {
         sources.entry((addr, stream)).or_insert_with(|| {
             if verbose {
                 println!("+ {addr} joined (stream {stream:08x})");
             }
-            let (writer, po, stats) = playout::stream(out_rate);
-            let _ = new_stream.send(po);
-            Incoming { writer, stats, who: None, last_seen: Instant::now(), peak: 0.0, gap_env: 0.0, worst_gap: 0.0 }
+            let (writer, _, stats) = playout::stream(SAMPLE_RATE);
+            let mut src = Incoming { writer, stats, who: None, last_seen: Instant::now(), peak: 0.0, gap_env: 0.0, worst_gap: 0.0 };
+            attach(&mut src, output);
+            src
         });
     };
 
     while !shared.stop.load(Relaxed) {
+        // Keep an output open: reopen after a device error or unplug, on
+        // request, or when the system default moves to another device.
+        let now = Instant::now();
+        let mut stale = output.as_ref().is_none_or(|o| o.failed.load(Relaxed)) || shared.reopen.swap(false, Relaxed);
+        if follow_default && !stale && now - default_check > Duration::from_secs(2) {
+            default_check = now;
+            let current = audio::device_names().default_output;
+            stale = output.as_ref().zip(current).is_some_and(|(o, d)| o.device != d);
+        }
+        if stale && now >= retry_at {
+            output = None;
+            match open() {
+                Ok(o) => {
+                    *shared.output.lock().unwrap() = o.device.clone();
+                    shared.output_lost.store(false, Relaxed);
+                    for src in sources.values_mut() {
+                        attach(src, Some(&o));
+                    }
+                    output = Some(o);
+                }
+                Err(e) => {
+                    if verbose {
+                        println!("output unavailable: {e}");
+                    }
+                    shared.output_lost.store(true, Relaxed);
+                    retry_at = now + Duration::from_secs(1);
+                }
+            }
+        }
+
         if let Ok((n, addr)) = sock.recv_from(&mut buf) {
             match protocol::decode(&buf[..n]) {
                 Some(Packet::Audio { stream, seq, blocks, retransmit }) => {
-                    join(&mut sources, addr, stream);
+                    join(&mut sources, addr, stream, output.as_ref());
                     let src = sources.get_mut(&(addr, stream)).unwrap();
                     let now = Instant::now();
                     if !retransmit {
@@ -331,7 +393,7 @@ pub fn run_hub(port: u16, new_stream: Sender<Playout>, out_rate: u32, shared: &H
                     }
                 }
                 Some(Packet::Hello { stream, device, source, os, name }) => {
-                    join(&mut sources, addr, stream);
+                    join(&mut sources, addr, stream, output.as_ref());
                     let src = sources.get_mut(&(addr, stream)).unwrap();
                     src.who = Some((Identity { device, name, os }, source));
                 }

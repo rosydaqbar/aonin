@@ -1,5 +1,5 @@
 <script lang="ts">
-  import { Mic, Monitor, Power } from '@lucide/svelte';
+  import { Mic, MicOff, Monitor, Power } from '@lucide/svelte';
   import ClientRow from './ClientRow.svelte';
   import StatusMark from './StatusMark.svelte';
   import { app, fmtMs, QUALITY, roleLine } from './state.svelte';
@@ -63,7 +63,7 @@
         <span class="label">send</span>
         <span class="set">
           <button class="chip" aria-pressed={app.link.send.system} onclick={() => actions.setSend('system', !app.link!.send.system)}><Monitor size={13} strokeWidth={1.75} />system audio</button>
-          <button class="chip" aria-pressed={app.link.send.mic} onclick={() => actions.setSend('mic', !app.link!.send.mic)}><Mic size={13} strokeWidth={1.75} />mic</button>
+          <button class="chip" aria-pressed={app.link.send.mic} onclick={() => actions.setSend('mic', !app.link!.send.mic)} aria-label={app.link.send.mic ? 'Turn microphone off' : 'Turn microphone on'}>{#if app.link.send.mic}<Mic size={13} strokeWidth={1.75} />mic on{:else}<MicOff size={13} strokeWidth={1.75} />mic off{/if}</button>
         </span>
         <span class="label" title="Coming soon">hear</span>
         <span class="set">

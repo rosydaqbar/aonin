@@ -59,7 +59,8 @@ export interface AppState {
   quality: Quality;
   outputLost: boolean;
   stats: Stats[];
-  devices: { outputs: string[]; mics: string[]; output: string; mic: string; systemSource: string };
+  /** Chosen device names; '' follows the system default. */
+  devices: { outputs: string[]; mics: string[]; output: string; mic: string; systemSource: string; defaultOutput: string; defaultMic: string };
   options: { reconnect: boolean; startAtLogin: boolean; quietWifi: boolean };
   /** Hosting or discovery failed to start. */
   error?: string | null;
@@ -87,9 +88,11 @@ const base: AppState = {
   devices: {
     outputs: ['Speakers (USB DAC)', 'Headphones (USB Headset)', 'Display Audio'],
     mics: ['USB Microphone', 'Headset Microphone', 'Built-in Microphone'],
-    output: 'Speakers (USB DAC)',
-    mic: 'USB Microphone',
-    systemSource: 'Speakers (USB DAC)',
+    output: '',
+    mic: '',
+    systemSource: '',
+    defaultOutput: 'Speakers (USB DAC)',
+    defaultMic: 'USB Microphone',
   },
   options: { reconnect: true, startAtLogin: true, quietWifi: false },
 };

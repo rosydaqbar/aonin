@@ -61,8 +61,8 @@ fn main() -> Result<()> {
             Ok(())
         }
         Cmd::Hub { port, output } => {
-            let (_stream, tx, rate) = audio::start_output(output.as_deref())?;
-            net::run_hub(port, tx, rate, &net::HubShared::default(), true)
+            let follow = output.is_none();
+            net::run_hub(port, || audio::start_output(output.as_deref()), follow, &net::HubShared::default(), true)
         }
         Cmd::Send { hub, source, device, drop_percent } => {
             let hub = resolve(&hub)?;

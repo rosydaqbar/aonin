@@ -27,6 +27,8 @@ struct HostRun {
     shared: Arc<HubShared>,
     thread: JoinHandle<()>,
     error: Arc<Mutex<Option<String>>>,
+    /// Output device choice the hub reads on each (re)open.
+    output: Arc<Mutex<Option<String>>>,
 }
 
 struct SendRun {
@@ -54,6 +56,17 @@ struct Mix {
 pub struct Prefs {
     pub reconnect: bool,
     pub last_host: Option<u64>,
+    /// Chosen devices by name; `None` follows the system default.
+    pub output: Option<String>,
+    pub system_source: Option<String>,
+    pub mic: Option<String>,
+}
+
+#[derive(Clone, Copy, Debug)]
+pub enum DeviceRole {
+    Output,
+    SystemSource,
+    Mic,
 }
 
 pub struct Engine {
@@ -156,9 +169,12 @@ struct Stats {
 struct Devices {
     outputs: Vec<String>,
     mics: Vec<String>,
+    /// Chosen device names; empty means "follow the system default".
     output: String,
     mic: String,
     system_source: String,
+    default_output: String,
+    default_mic: String,
 }
 
 #[derive(Serialize)]
@@ -216,6 +232,42 @@ impl Engine {
         self.prefs.lock().unwrap().reconnect = on;
     }
 
+    pub fn prefs(&self) -> std::sync::MutexGuard<'_, Prefs> {
+        self.prefs.lock().unwrap()
+    }
+
+    /// Pick a device by name (`None` = system default) and apply it live.
+    pub fn set_device(&self, role: DeviceRole, name: Option<String>) {
+        {
+            let mut p = self.prefs.lock().unwrap();
+            match role {
+                DeviceRole::Output => p.output = name,
+                DeviceRole::SystemSource => p.system_source = name,
+                DeviceRole::Mic => p.mic = name,
+            }
+        }
+        match role {
+            DeviceRole::Output => {
+                if let Some(h) = self.host.lock().unwrap().as_ref() {
+                    h.output.lock().unwrap().clone_from(&self.prefs.lock().unwrap().output);
+                    h.shared.reopen.store(true, Relaxed);
+                }
+            }
+            DeviceRole::SystemSource | DeviceRole::Mic => {
+                // Restart the affected sender on the new device.
+                let source = if matches!(role, DeviceRole::Mic) { Source::Mic } else { Source::System };
+                let on = self.link.lock().unwrap().as_ref().is_some_and(|l| match source {
+                    Source::System => l.system.is_some(),
+                    Source::Mic => l.mic.is_some(),
+                });
+                if on {
+                    self.set_send(source, false);
+                    self.set_send(source, true);
+                }
+            }
+        }
+    }
+
     pub fn become_host(&self) -> Result<()> {
         let mut host = self.host.lock().unwrap();
         if host.is_some() {
@@ -223,17 +275,21 @@ impl Engine {
         }
         let shared = Arc::new(HubShared::default());
         let error = Arc::new(Mutex::new(None));
-        let (s, e) = (shared.clone(), error.clone());
+        let output = Arc::new(Mutex::new(self.prefs.lock().unwrap().output.clone()));
+        let (s, e, o) = (shared.clone(), error.clone(), output.clone());
         let thread = std::thread::Builder::new().name("aonin-hub".into()).spawn(move || {
             let run = || -> Result<()> {
-                let (_stream, tx, rate) = audio::start_output(None)?;
-                net::run_hub(DEFAULT_PORT, tx, rate, &s, false)
+                // A chosen device is reread on every (re)open so a new pick
+                // takes effect; with none chosen, follow the system default.
+                let open = || audio::start_output(o.lock().unwrap().as_deref());
+                let follow = o.lock().unwrap().is_none();
+                net::run_hub(DEFAULT_PORT, open, follow, &s, false)
             };
             if let Err(err) = run() {
                 *e.lock().unwrap() = Some(format!("Couldn't start hosting: {err}"));
             }
         })?;
-        *host = Some(HostRun { shared, thread, error });
+        *host = Some(HostRun { shared, thread, error, output });
         Ok(())
     }
 
@@ -248,6 +304,13 @@ impl Engine {
         let shared = Arc::new(SendShared::default());
         let s = shared.clone();
         let who = self.me.clone();
+        let device = {
+            let p = self.prefs.lock().unwrap();
+            match source {
+                Source::System => p.system_source.clone(),
+                Source::Mic => p.mic.clone(),
+            }
+        };
         let thread = std::thread::Builder::new()
             .name(format!("aonin-send-{source:?}"))
             .spawn(move || {
@@ -256,7 +319,7 @@ impl Engine {
                     Source::Mic => audio::Source::Mic,
                 };
                 let run = || -> Result<()> {
-                    let (_stream, cap, rate) = audio::start_capture(kind, None)?;
+                    let (_stream, cap, rate) = audio::start_capture(kind, device.as_deref())?;
                     net::run_sender(SendConfig { hub: addr, who, source, drop_percent: 0, verbose: false }, cap, rate, &s)
                 };
                 if let Err(e) = run() {
@@ -366,12 +429,15 @@ impl Engine {
         // Host side: one row per client device, merging its system + mic streams.
         let mut error = self.disco.error.lock().unwrap().clone().map(|e| format!("Can't look for other devices: {e}"));
         let mut stats = Vec::new();
+        let mut output_lost = false;
         let hosting = {
             let host = self.host.lock().unwrap();
             host.as_ref().map(|h| {
                 if let Some(e) = h.error.lock().unwrap().clone() {
                     error = Some(e);
                 }
+                output_lost = h.shared.output_lost.load(Relaxed);
+                let playing = h.shared.output.lock().unwrap().clone();
                 let streams = h.shared.streams.lock().unwrap().clone();
                 let mut rows: BTreeMap<String, (ClientRow, f32, u32, u32, f32)> = BTreeMap::new();
                 for s in &streams {
@@ -410,7 +476,7 @@ impl Engine {
                         row
                     })
                     .collect::<Vec<_>>();
-                Hosting { output: names.default_output.clone().unwrap_or_else(|| "default output".into()), clients }
+                Hosting { output: if playing.is_empty() { "no output".into() } else { playing }, clients }
             })
         };
 
@@ -465,7 +531,17 @@ impl Engine {
             }
         });
 
-        let output = names.default_output.clone().unwrap_or_default();
+        let prefs = self.prefs.lock().unwrap();
+        let devices = Devices {
+            output: prefs.output.clone().unwrap_or_default(),
+            system_source: prefs.system_source.clone().unwrap_or_default(),
+            mic: prefs.mic.clone().unwrap_or_default(),
+            default_output: names.default_output.clone().unwrap_or_default(),
+            default_mic: names.default_input.clone().unwrap_or_default(),
+            outputs: names.outputs,
+            mics: names.inputs,
+        };
+        drop(prefs);
         Snapshot {
             me: Me { name: self.me.name.clone(), os: os_name(self.me.os) },
             gate: None,
@@ -474,15 +550,9 @@ impl Engine {
             link,
             hosts,
             quality: "lossless",
-            output_lost: false,
+            output_lost,
             stats,
-            devices: Devices {
-                outputs: names.outputs,
-                mics: names.inputs,
-                output: output.clone(),
-                mic: names.default_input.unwrap_or_default(),
-                system_source: output,
-            },
+            devices,
             options: Options { reconnect, start_at_login: false, quiet_wifi: false },
             error,
         }

@@ -68,7 +68,7 @@
             <div class="grid2">
               <Switch label="Send system audio" hint="everything this device plays" checked={app.link.send.system} onchange={(on) => actions.setSend('system', on)} />
               <Switch label="Hear host audio" hint="coming soon" disabled />
-              <Switch label="Send microphone" hint={app.devices.mic} checked={app.link.send.mic} onchange={(on) => actions.setSend('mic', on)} />
+              <Switch label="Send microphone" hint={app.devices.mic || app.devices.defaultMic} checked={app.link.send.mic} onchange={(on) => actions.setSend('mic', on)} />
               <Switch label="Hear host mic" hint="coming soon" disabled />
             </div>
           </div>
@@ -103,9 +103,24 @@
       {:else if section === 'audio'}
         <div class="titlebar"><h2>Audio devices</h2></div>
         <div class="form">
-          <label><span>Play everything on</span><select bind:value={app.devices.output}>{#each app.devices.outputs as d}<option>{d}</option>{/each}</select><span class="label">where the mix comes out when this device is host</span></label>
-          <label><span>System audio from</span><select bind:value={app.devices.systemSource}>{#each app.devices.outputs as d}<option>{d}</option>{/each}</select><span class="label">the output whose sound is sent to the host</span></label>
-          <label><span>Microphone</span><select bind:value={app.devices.mic}>{#each app.devices.mics as d}<option>{d}</option>{/each}</select><span class="label">used when “send microphone” is on</span></label>
+          <label><span>Play everything on</span>
+            <select value={app.devices.output} onchange={(e) => actions.setDevice('output', e.currentTarget.value)}>
+              <option value="">System default ({app.devices.defaultOutput || 'none'})</option>
+              {#each app.devices.outputs as d}<option value={d}>{d}</option>{/each}
+            </select>
+            <span class="label">where the mix comes out when this device is host; follows the system default unless you pick one</span></label>
+          <label><span>System audio from</span>
+            <select value={app.devices.systemSource} onchange={(e) => actions.setDevice('systemSource', e.currentTarget.value)}>
+              <option value="">System default ({app.devices.defaultOutput || 'none'})</option>
+              {#each app.devices.outputs as d}<option value={d}>{d}</option>{/each}
+            </select>
+            <span class="label">the output whose sound is sent to the host</span></label>
+          <label><span>Microphone</span>
+            <select value={app.devices.mic} onchange={(e) => actions.setDevice('mic', e.currentTarget.value)}>
+              <option value="">System default ({app.devices.defaultMic || 'none'})</option>
+              {#each app.devices.mics as d}<option value={d}>{d}</option>{/each}
+            </select>
+            <span class="label">used when “send microphone” is on</span></label>
         </div>
       {:else if section === 'network'}
         <div class="titlebar"><h2>Connection health</h2></div>

@@ -2,7 +2,7 @@
 //! a popover, plus a main window. Closing the window keeps Aonin running in
 //! the tray; Quit lives in the popover.
 
-use aon::engine::{self, Engine, Prefs};
+use aon::engine::{self, DeviceRole, Engine, Prefs};
 use aon_core::protocol::Source;
 use serde::{Deserialize, Serialize};
 use std::hash::{BuildHasher, RandomState};
@@ -25,6 +25,12 @@ struct Config {
     device: u64,
     last_host: Option<u64>,
     reconnect: Option<bool>,
+    #[serde(default)]
+    output: Option<String>,
+    #[serde(default)]
+    system_source: Option<String>,
+    #[serde(default)]
+    mic: Option<String>,
 }
 
 fn config_path(app: &AppHandle) -> Option<PathBuf> {
@@ -95,6 +101,25 @@ fn set_send(engine: Eng, source: String, on: bool) {
     engine.set_send(if source == "mic" { Source::Mic } else { Source::System }, on);
 }
 
+/// Choose a device by name; an empty name follows the system default.
+#[tauri::command]
+fn set_device(app: AppHandle, engine: Eng, role: String, name: String) {
+    let name = (!name.is_empty()).then_some(name);
+    let role = match role.as_str() {
+        "output" => DeviceRole::Output,
+        "mic" => DeviceRole::Mic,
+        _ => DeviceRole::SystemSource,
+    };
+    engine.set_device(role, name.clone());
+    let mut cfg = load_config(&app);
+    match role {
+        DeviceRole::Output => cfg.output = name,
+        DeviceRole::SystemSource => cfg.system_source = name,
+        DeviceRole::Mic => cfg.mic = name,
+    }
+    save_config(&app, &cfg);
+}
+
 #[tauri::command]
 fn set_reconnect(app: AppHandle, engine: Eng, on: bool) {
     engine.set_reconnect(on);
@@ -112,6 +137,8 @@ fn start_poller(app: AppHandle, engine: Arc<Engine>, mut cfg: Config) {
             let snap = engine.tick();
             let _ = app.emit("state", &snap);
             if engine.last_host() != cfg.last_host {
+                // Reload first: other settings may have been saved meanwhile.
+                cfg = load_config(&app);
                 cfg.last_host = engine.last_host();
                 save_config(&app, &cfg);
             }
@@ -221,7 +248,14 @@ pub fn run() {
             let handle = app.handle();
             let cfg = load_config(handle);
             let name = gethostname::gethostname().to_string_lossy().into_owned();
-            let engine = Engine::new(cfg.device, name, Prefs { reconnect: cfg.reconnect.unwrap_or(true), last_host: cfg.last_host });
+            let prefs = Prefs {
+                reconnect: cfg.reconnect.unwrap_or(true),
+                last_host: cfg.last_host,
+                output: cfg.output.clone(),
+                system_source: cfg.system_source.clone(),
+                mic: cfg.mic.clone(),
+            };
+            let engine = Engine::new(cfg.device, name, prefs);
             app.manage(engine.clone());
             start_poller(handle.clone(), engine, cfg);
             build_popover(handle)?;
@@ -261,6 +295,7 @@ pub fn run() {
             set_volume,
             set_muted,
             set_send,
+            set_device,
             set_reconnect
         ])
         .run(tauri::generate_context!())

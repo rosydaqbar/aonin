@@ -8,6 +8,8 @@ use cpal::traits::{DeviceTrait, HostTrait, StreamTrait};
 use cpal::{Device, FromSample, SampleFormat, SizedSample, Stream, StreamConfig};
 use crossbeam_channel::{Receiver, Sender};
 use rtrb::{Consumer, Producer, RingBuffer};
+use std::sync::Arc;
+use std::sync::atomic::{AtomicBool, Ordering::Relaxed};
 
 #[derive(Clone, Copy, Debug, clap::ValueEnum)]
 pub enum Source {
@@ -108,9 +110,18 @@ where
     Ok(stream)
 }
 
-/// Start the hub's output. New incoming streams are handed to the audio
-/// callback through the returned channel.
-pub fn start_output(name: Option<&str>) -> Result<(Stream, Sender<Playout>, u32)> {
+/// A running output. New incoming streams are handed to its callback
+/// through `tx`; `failed` turns true when the device errors or goes away.
+pub struct Output {
+    pub stream: Stream,
+    pub tx: Sender<Playout>,
+    pub rate: u32,
+    pub device: String,
+    pub failed: Arc<AtomicBool>,
+}
+
+/// Start the hub's output on the named device, or the system default.
+pub fn start_output(name: Option<&str>) -> Result<Output> {
     let host = cpal::default_host();
     let device = pick(host.output_devices()?, host.default_output_device(), name)?;
     let supported = device.default_output_config()?;
@@ -119,20 +130,22 @@ pub fn start_output(name: Option<&str>) -> Result<(Stream, Sender<Playout>, u32)
     println!("Playing to \"{device}\" ({} ch, {rate} Hz, {:?})", config.channels, supported.sample_format());
 
     let (tx, rx) = crossbeam_channel::bounded(64);
+    let failed = Arc::new(AtomicBool::new(false));
+    let f = failed.clone();
     let stream = match supported.sample_format() {
-        SampleFormat::I16 => build_output::<i16>(&device, config, rx),
-        SampleFormat::I32 => build_output::<i32>(&device, config, rx),
-        SampleFormat::F32 => build_output::<f32>(&device, config, rx),
-        SampleFormat::F64 => build_output::<f64>(&device, config, rx),
-        SampleFormat::U16 => build_output::<u16>(&device, config, rx),
-        SampleFormat::U8 => build_output::<u8>(&device, config, rx),
+        SampleFormat::I16 => build_output::<i16>(&device, config, rx, f),
+        SampleFormat::I32 => build_output::<i32>(&device, config, rx, f),
+        SampleFormat::F32 => build_output::<f32>(&device, config, rx, f),
+        SampleFormat::F64 => build_output::<f64>(&device, config, rx, f),
+        SampleFormat::U16 => build_output::<u16>(&device, config, rx, f),
+        SampleFormat::U8 => build_output::<u8>(&device, config, rx, f),
         f => bail!("unsupported sample format {f:?}"),
     }?;
     stream.play().context("starting output")?;
-    Ok((stream, tx, rate))
+    Ok(Output { stream, tx, rate, device: device.to_string(), failed })
 }
 
-fn build_output<T>(device: &Device, config: StreamConfig, rx: Receiver<Playout>) -> Result<Stream>
+fn build_output<T>(device: &Device, config: StreamConfig, rx: Receiver<Playout>, failed: Arc<AtomicBool>) -> Result<Stream>
 where
     T: SizedSample + FromSample<f32>,
 {
@@ -164,7 +177,10 @@ where
                 }
             }
         },
-        |e| eprintln!("output error: {e}"),
+        move |e| {
+            eprintln!("output error: {e}");
+            failed.store(true, Relaxed);
+        },
         None,
     )?;
     Ok(stream)
