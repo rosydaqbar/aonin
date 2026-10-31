@@ -1,0 +1,19 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1024 1024" width="1024" height="1024">
+  <!-- Aonin app icon, redrawn from the 256 px original (icon/Aonin_App.ico).
+       Housing 808 px (79% of the canvas, matching the macOS icon grid),
+       solid base 32 px below it, 3x3 grille: r 82, pitch 210, centre lit. -->
+  <defs>
+    <linearGradient id="face" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0" stop-color="#e3e2e0"/>
+      <stop offset="1" stop-color="#d6d5d4"/>
+    </linearGradient>
+  </defs>
+  <rect x="108" y="124" width="808" height="808" rx="180" fill="#a1a09d"/>
+  <rect x="108" y="92" width="808" height="808" rx="180" fill="url(#face)"/>
+  <g fill="#2c2c2c">
+    <circle cx="302" cy="286" r="82"/><circle cx="512" cy="286" r="82"/><circle cx="722" cy="286" r="82"/>
+    <circle cx="302" cy="496" r="82"/>                                   <circle cx="722" cy="496" r="82"/>
+    <circle cx="302" cy="706" r="82"/><circle cx="512" cy="706" r="82"/><circle cx="722" cy="706" r="82"/>
+  </g>
+  <circle cx="512" cy="496" r="82" fill="#e65b0f"/>
+</svg>

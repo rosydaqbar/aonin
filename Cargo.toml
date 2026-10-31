@@ -1,0 +1,6 @@
+[workspace]
+resolver = "3"
+members = ["crates/aon-core", "crates/aon", "app/src-tauri"]
+
+[profile.release]
+debug = 1

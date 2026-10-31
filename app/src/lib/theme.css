@@ -1,0 +1,170 @@
+@import '@fontsource-variable/hanken-grotesk';
+
+/* Braun housing in near-neutral greys (a trace of warmth, no beige or
+   brown). Light: pale grey body, graphite strip. Dark: charcoal body.
+   Colour is reserved for state and the one primary action. */
+:root {
+  color-scheme: light;
+  --housing: #ebebea;
+  --recess: #e1e1df;
+  --raised: #f6f6f5;
+  --strip: #2a2a2a;
+  --strip-ink: #ebebea;
+  --strip-ink-2: #a6a6a4;
+  --ink: #222222;
+  --ink-2: #646462;
+  --line: #d5d5d3;
+  --line-strong: #bbbbb9;
+  --hole: #d8d8d6;
+  --hole-fill: #2a2a2a;
+  --orange: #e8601c;
+  --orange-ink: #b8490f;
+  --green: #5e8a2f;
+  --yellow: #c99312;
+  --yellow-ink: #8a6408;
+  --red: #c0352b;
+  --red-wash: #f0dedb;
+  --focus: #e8601c;
+  --shadow: 0 1px 2px rgb(20 20 20 / 0.12), 0 8px 24px rgb(20 20 20 / 0.10);
+
+  --font: 'Hanken Grotesk Variable', 'Helvetica Neue', Helvetica, Arial, sans-serif;
+  --size: 13px;
+  --size-s: 11px;
+  --row: 44px;
+  --radius: 10px;
+}
+
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme='light']) {
+    color-scheme: dark;
+    --housing: #212121;
+    --recess: #191919;
+    --raised: #2c2c2c;
+    --strip: #131313;
+    --strip-ink: #e9e9e7;
+    --strip-ink-2: #999997;
+    --ink: #e9e9e7;
+    --ink-2: #a2a2a0;
+    --line: #353535;
+    --line-strong: #484847;
+    --hole: #333333;
+    --hole-fill: #e9e9e7;
+    --orange: #f07a3a;
+    --orange-ink: #f39260;
+    --green: #9bbe55;
+    --yellow: #e2b23c;
+    --yellow-ink: #e2b23c;
+    --red: #e5584b;
+    --red-wash: #3a2725;
+    --focus: #f07a3a;
+    --shadow: 0 1px 2px rgb(0 0 0 / 0.4), 0 10px 28px rgb(0 0 0 / 0.35);
+  }
+}
+
+:root[data-theme='dark'] {
+  color-scheme: dark;
+  --housing: #212121;
+  --recess: #191919;
+  --raised: #2c2c2c;
+  --strip: #131313;
+  --strip-ink: #e9e9e7;
+  --strip-ink-2: #999997;
+  --ink: #e9e9e7;
+  --ink-2: #a2a2a0;
+  --line: #353535;
+  --line-strong: #484847;
+  --hole: #333333;
+  --hole-fill: #e9e9e7;
+  --orange: #f07a3a;
+  --orange-ink: #f39260;
+  --green: #9bbe55;
+  --yellow: #e2b23c;
+  --yellow-ink: #e2b23c;
+  --red: #e5584b;
+  --red-wash: #3a2725;
+  --focus: #f07a3a;
+  --shadow: 0 1px 2px rgb(0 0 0 / 0.4), 0 10px 28px rgb(0 0 0 / 0.35);
+}
+
+* { box-sizing: border-box; margin: 0; padding: 0; }
+
+html, body {
+  background: var(--housing);
+  color: var(--ink);
+  font: 400 var(--size) / 1.35 var(--font);
+  font-feature-settings: 'tnum' 1;
+  -webkit-font-smoothing: antialiased;
+  user-select: none;
+  cursor: default;
+}
+
+::selection { background: var(--orange); color: #fff; }
+
+button, input, select { font: inherit; color: inherit; }
+
+:focus-visible { outline: 2px solid var(--focus); outline-offset: 2px; border-radius: 4px; }
+
+::-webkit-scrollbar { width: 10px; }
+::-webkit-scrollbar-thumb { background: var(--line-strong); border-radius: 5px; border: 3px solid var(--housing); }
+::-webkit-scrollbar-track { background: transparent; }
+
+/* Two sizes only. Labels are the small size, lowercase, a little tracked. */
+.label {
+  font-size: var(--size-s);
+  letter-spacing: 0.04em;
+  color: var(--ink-2);
+}
+
+.num { font-variant-numeric: tabular-nums; }
+
+/* Buttons: one pill family. */
+.btn {
+  height: 28px;
+  padding: 0 14px;
+  border-radius: 14px;
+  border: 1px solid var(--line-strong);
+  background: var(--raised);
+  font-size: var(--size-s);
+  letter-spacing: 0.04em;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  white-space: nowrap;
+  transition: background 120ms cubic-bezier(0.16, 1, 0.3, 1), border-color 120ms;
+}
+.btn:hover:not(:disabled) { border-color: var(--ink-2); }
+.btn:active:not(:disabled) { background: var(--recess); }
+.btn:disabled { color: var(--ink-2); opacity: 0.6; }
+.btn.primary { background: var(--orange); border-color: var(--orange); color: #fff; font-weight: 600; }
+.btn.primary:hover:not(:disabled) { background: var(--orange-ink); border-color: var(--orange-ink); }
+.btn.dark { background: var(--strip); border-color: var(--strip); color: var(--strip-ink); }
+.btn.quiet { border-color: transparent; background: transparent; }
+.btn.quiet:hover:not(:disabled) { background: var(--recess); }
+
+/* Range: thin graphite track, raised round thumb. */
+input[type='range'] {
+  -webkit-appearance: none;
+  appearance: none;
+  width: 100%;
+  height: 20px;
+  background: transparent;
+  --p: 50%;
+}
+input[type='range']::-webkit-slider-runnable-track {
+  height: 4px;
+  border-radius: 2px;
+  background: linear-gradient(to right, var(--hole-fill) var(--p), var(--line) var(--p));
+}
+input[type='range']::-webkit-slider-thumb {
+  -webkit-appearance: none;
+  width: 16px;
+  height: 16px;
+  margin-top: -6px;
+  border-radius: 50%;
+  background: var(--raised);
+  border: 1px solid var(--line-strong);
+  box-shadow: 0 1px 2px rgb(0 0 0 / 0.2);
+}
+input[type='range']:disabled::-webkit-slider-runnable-track {
+  background: linear-gradient(to right, var(--ink-2) var(--p), var(--line) var(--p));
+}

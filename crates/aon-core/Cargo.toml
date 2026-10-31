@@ -1,0 +1,7 @@
+[package]
+name = "aon-core"
+version = "0.1.0"
+edition = "2024"
+
+[dependencies]
+rtrb = "0.4.1"
