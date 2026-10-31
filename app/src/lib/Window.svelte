@@ -21,7 +21,7 @@
 
 <div class="win">
   <header class="strip">
-    <span class="brand">aonin</span>
+    <span class="brand">Aonin</span>
     <span class="me">{app.me.name} · {app.me.os === 'macos' ? 'macOS' : 'Windows'}</span>
     <span class="role"><i style:background={dot}></i>{roleLine(app)}</span>
   </header>
@@ -29,7 +29,7 @@
   <div class="body">
     <nav aria-label="Sections">
       {#each sections as s}
-        <a href="#{s}" aria-current={section === s ? 'page' : undefined}>{s}</a>
+        <a href="#{s}" aria-current={section === s ? 'page' : undefined}>{s[0].toUpperCase() + s.slice(1)}</a>
       {/each}
     </nav>
 
@@ -45,11 +45,11 @@
         {#if app.hosting}
           <div class="titlebar">
             <h2>Clients</h2>
-            <span class="label">playing to {app.hosting.output}</span>
-            <button class="btn" onclick={actions.stopHosting}>stop hosting</button>
+            <span class="label">Playing to {app.hosting.output}</span>
+            <button class="btn" onclick={actions.stopHosting}>Stop hosting</button>
           </div>
           {#if app.hosting.clients.length}
-            <div class="cols label"><span></span><span>device</span><span>level</span><span class="r">latency</span><span>volume</span><span></span></div>
+            <div class="cols label"><span></span><span>Device</span><span>Level</span><span class="r">Latency</span><span>Volume</span><span></span></div>
             {#each app.hosting.clients as row (row.id)}<ClientRow {row} wide />{/each}
           {:else}
             <p class="empty">Waiting for clients. Open Aonin on another device on this network and it will appear here.</p>
@@ -62,12 +62,12 @@
             <div class="linkhead">
               <StatusMark mark={app.link.status === 'connected' ? 'live' : 'connecting'} />
               <span class="name">{app.link.host.name}</span>
-              <span class="label num">{app.link.status === 'connected' ? fmtMs(app.link.latencyMs) : 'reconnecting…'}</span>
-              <button class="btn" onclick={actions.disconnect}>disconnect</button>
+              <span class="label num">{app.link.status === 'connected' ? fmtMs(app.link.latencyMs) : 'Reconnecting…'}</span>
+              <button class="btn" onclick={actions.disconnect}>Disconnect</button>
             </div>
             <div class="grid2">
-              <Switch label="Send system audio" hint="everything this device plays" checked={app.link.send.system} onchange={(on) => actions.setSend('system', on)} />
-              <Switch label="Hear host audio" hint="what {app.link.host.name}'s apps play, without the mix" checked={app.link.hear.system} onchange={(on) => actions.setHear('system', on)} />
+              <Switch label="Send system audio" hint="Everything this device plays" checked={app.link.send.system} onchange={(on) => actions.setSend('system', on)} />
+              <Switch label="Hear host audio" hint="What {app.link.host.name}'s apps play, without the mix" checked={app.link.hear.system} onchange={(on) => actions.setHear('system', on)} />
               <Switch label="Send microphone" hint={app.devices.mic || app.devices.defaultMic} checked={app.link.send.mic} onchange={(on) => actions.setSend('mic', on)} />
               <Switch label="Hear host mic" hint="{app.link.host.name}'s microphone, played here" checked={app.link.hear.mic} onchange={(on) => actions.setHear('mic', on)} />
             </div>
@@ -77,12 +77,12 @@
         {#if !app.hosting && !app.link}
           <div class="titlebar">
             <h2>Hosts on this network</h2>
-            {#if app.hosts.length}<button class="btn" onclick={actions.becomeHost}>become host</button>{/if}
+            {#if app.hosts.length}<button class="btn" onclick={actions.becomeHost}>Become host</button>{/if}
           </div>
           {#if app.hosts.length === 0}
             <div class="solo">
               <p>No host on this network yet.</p>
-              <button class="btn primary" onclick={actions.becomeHost}>become host</button>
+              <button class="btn primary" onclick={actions.becomeHost}>Become host</button>
             </div>
           {/if}
         {/if}
@@ -94,9 +94,9 @@
               <StatusMark mark={h.blocked ? 'error' : 'live'} />
               <div class="who">
                 <span class="name">{h.name}</span>
-                <span class="label" class:bad={h.blocked}>{h.blocked ?? `hosting · ${h.clients} ${h.clients === 1 ? 'client' : 'clients'}`}</span>
+                <span class="label" class:bad={h.blocked}>{h.blocked ?? `Hosting · ${h.clients} ${h.clients === 1 ? 'client' : 'clients'}`}</span>
               </div>
-              <button class="btn" disabled={!!h.blocked} onclick={() => actions.connect(h.id)}>{h.blocked ? "can't join" : 'connect'}</button>
+              <button class="btn" disabled={!!h.blocked} onclick={() => actions.connect(h.id)}>{h.blocked ? "Can't join" : 'Connect'}</button>
             </div>
           {/each}
         {/if}
@@ -108,25 +108,25 @@
               <option value="">System default ({app.devices.defaultOutput || 'none'})</option>
               {#each app.devices.outputs as d}<option value={d}>{d}</option>{/each}
             </select>
-            <span class="label">where the mix comes out when this device is host; follows the system default unless you pick one</span></label>
+            <span class="label">Where the mix comes out when this device is host. Follows the system default unless you pick one.</span></label>
           <label><span>System audio from</span>
             <select value={app.devices.systemSource} onchange={(e) => actions.setDevice('systemSource', e.currentTarget.value)}>
               <option value="">System default ({app.devices.defaultOutput || 'none'})</option>
               {#each app.devices.outputs as d}<option value={d}>{d}</option>{/each}
             </select>
-            <span class="label">the output whose sound is sent to the host</span></label>
+            <span class="label">The output whose sound is sent to the host.</span></label>
           <label><span>Microphone</span>
             <select value={app.devices.mic} onchange={(e) => actions.setDevice('mic', e.currentTarget.value)}>
               <option value="">System default ({app.devices.defaultMic || 'none'})</option>
               {#each app.devices.mics as d}<option value={d}>{d}</option>{/each}
             </select>
-            <span class="label">used when “send microphone” is on</span></label>
+            <span class="label">Used when “Send microphone” is on.</span></label>
         </div>
       {:else if section === 'network'}
         <div class="titlebar"><h2>Connection health</h2></div>
         {#if app.stats.length}
           <table>
-            <thead><tr class="label"><th>device</th><th>buffer</th><th>repaired</th><th>covered gaps</th><th>dropouts</th></tr></thead>
+            <thead><tr class="label"><th>Device</th><th>Buffer</th><th>Repaired</th><th>Covered gaps</th><th>Dropouts</th></tr></thead>
             <tbody>
               {#each app.stats as s}
                 <tr><td>{s.name}</td><td class="num">{fmtMs(s.bufferMs)} <span class="label">of {fmtMs(s.targetMs)}</span></td><td class="num">{s.recovered}</td><td class="num">{s.concealed}</td><td class="num">{s.dropouts}</td></tr>
@@ -143,10 +143,10 @@
         {/if}
         {#if app.me.os === 'macos'}
           <div class="titlebar"><h2>Wi-Fi</h2></div>
-          <Switch label="Keep Wi-Fi steady" hint="turns off AirDrop and Handoff scanning, which makes Mac Wi-Fi stall every few seconds; asks for your password; back on when you switch this off or restart" checked={app.options.quietWifi} onchange={(on) => actions.setQuietWifi(on)} />
+          <Switch label="Keep Wi-Fi steady" hint="Turns off AirDrop and Handoff scanning, which makes Mac Wi-Fi stall every few seconds. Asks for your password; back on when you switch this off or restart." checked={app.options.quietWifi} onchange={(on) => actions.setQuietWifi(on)} />
         {/if}
       {:else}
-        <div class="titlebar"><h2>Quality</h2><span class="label">for audio this device sends</span></div>
+        <div class="titlebar"><h2>Quality</h2><span class="label">For audio this device sends</span></div>
         <div class="radios" role="radiogroup" aria-label="Quality">
           {#each Object.entries(QUALITY) as [key, q]}
             <label class="radio">
@@ -159,8 +159,8 @@
           {/each}
         </div>
         <div class="titlebar"><h2>Startup</h2></div>
-        <Switch label="Reconnect automatically" hint="join the last host as soon as Aonin opens" checked={app.options.reconnect} onchange={(on) => actions.setReconnect(on)} />
-        <Switch label="Open at login" hint="start Aonin in the background when you sign in" checked={app.options.startAtLogin} onchange={(on) => actions.setStartAtLogin(on)} />
+        <Switch label="Reconnect automatically" hint="Join the last host as soon as Aonin opens" checked={app.options.reconnect} onchange={(on) => actions.setReconnect(on)} />
+        <Switch label="Open at login" hint="Start Aonin in the background when you sign in" checked={app.options.startAtLogin} onchange={(on) => actions.setStartAtLogin(on)} />
       {/if}
     </main>
   </div>
@@ -179,7 +179,7 @@
   nav a:hover { background: var(--recess); }
   nav a[aria-current='page'] { background: var(--recess); font-weight: 700; }
   main { padding: 8px 28px 28px; overflow-y: auto; }
-  h2 { font-size: var(--size); font-weight: 700; text-transform: uppercase; letter-spacing: 0.07em; }
+  h2 { font-size: var(--size); font-weight: 700; }
   .titlebar { display: flex; align-items: center; gap: 14px; margin: 22px 0 8px; min-height: 28px; }
   .titlebar .label { margin-left: auto; }
   .titlebar .label + .btn { margin-left: 0; }

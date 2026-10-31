@@ -9,15 +9,15 @@
 
   let what = $derived(
     row.mark === 'connecting'
-      ? 'connecting…'
-      : [row.sends.system && 'system', row.sends.mic && 'mic'].filter(Boolean).join(' + ')
+      ? 'Connecting…'
+      : [row.sends.system && 'System audio', row.sends.mic && 'mic'].filter(Boolean).join(' + ')
   );
   let health = $derived(
-    row.mark === 'muted' ? 'muted'
-    : row.mark === 'connecting' ? 'connecting…'
+    row.mark === 'muted' ? 'Muted'
+    : row.mark === 'connecting' ? 'Connecting…'
     : fmtMs(row.latencyMs)
   );
-  let note = $derived(row.mark !== 'degraded' ? null : wide ? `unstable · ${row.recovered} repaired` : 'unstable');
+  let note = $derived(row.mark !== 'degraded' ? null : wide ? `Unstable · ${row.recovered} repaired` : 'Unstable');
 </script>
 
 <div class="row" class:wide>
@@ -45,7 +45,7 @@
   />
   {#if wide}
     <button class="btn" class:dark={row.muted} onclick={() => actions.setMuted(row.id, !row.muted)} aria-pressed={row.muted}>
-      {row.muted ? 'muted' : 'mute'}
+      {row.muted ? 'Muted' : 'Mute'}
     </button>
   {:else}
     <button

@@ -181,14 +181,14 @@ export async function followBackend() {
 
 /** A device reads as "connected somewhere" in the strip. */
 export function roleLine(s: AppState): string {
-  if (s.gate) return 'setup needed';
-  if (s.hosting && s.link) return `hosting · also sending to ${s.link.host.name}`;
+  if (s.gate) return 'Setup needed';
+  if (s.hosting && s.link) return `Hosting · also sending to ${s.link.host.name}`;
   if (s.hosting) {
     const n = s.hosting.clients.length;
-    return n === 0 ? 'hosting · no clients yet' : `hosting · ${n} ${n === 1 ? 'client' : 'clients'}`;
+    return n === 0 ? 'Hosting · no clients yet' : `Hosting · ${n} ${n === 1 ? 'client' : 'clients'}`;
   }
-  if (s.link) return s.link.status === 'connected' ? `sending to ${s.link.host.name}` : `reconnecting to ${s.link.host.name}`;
-  return 'not connected';
+  if (s.link) return s.link.status === 'connected' ? `Sending to ${s.link.host.name}` : `Reconnecting to ${s.link.host.name}`;
+  return 'Not connected';
 }
 
 export function fmtMs(ms: number): string {

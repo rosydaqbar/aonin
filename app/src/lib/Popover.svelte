@@ -18,7 +18,7 @@
     <span class="me" title={app.me.name}>{app.me.name}</span>
     <span class="role"><i style:background={dot}></i>{roleLine(app)}</span>
     {#if app.hosting}
-      <button class="stop" onclick={actions.stopHosting}>stop</button>
+      <button class="stop" onclick={actions.stopHosting}>Stop</button>
     {/if}
   </header>
 
@@ -33,41 +33,41 @@
   {#if app.gate === 'permission'}
     <section class="solo">
       <p>Aonin needs permission to capture this Mac's audio.</p>
-      <button class="btn primary" onclick={actions.grantPermission}>allow audio capture</button>
+      <button class="btn primary" onclick={actions.grantPermission}>Allow audio capture</button>
     </section>
   {:else if app.gate === 'firewall'}
     <section class="solo">
       <p>Windows Firewall is stopping other devices from reaching this PC.</p>
-      <button class="btn primary" onclick={actions.allowFirewall}>allow in firewall</button>
+      <button class="btn primary" onclick={actions.allowFirewall}>Allow in firewall</button>
     </section>
   {:else if idle && app.hosts.length === 0}
     <section class="solo">
       <p>No host on this network yet.</p>
-      <button class="btn primary" onclick={actions.becomeHost}>become host</button>
+      <button class="btn primary" onclick={actions.becomeHost}>Become host</button>
     </section>
   {/if}
 
   {#if app.link}
     <section class="block">
       <div class="head">
-        <span class="label">{app.link.status === 'connected' ? 'sending to' : 'reconnecting to'}</span>
+        <span class="label">{app.link.status === 'connected' ? 'Sending to' : 'Reconnecting to'}</span>
         {#if app.link.status === 'connected'}<span class="label num">{fmtMs(app.link.latencyMs)}</span>{/if}
       </div>
       <div class="host">
         <StatusMark mark={app.link.status === 'connected' ? 'live' : 'connecting'} />
         <span class="name">{app.link.host.name}</span>
-        <button class="btn quiet" onclick={actions.disconnect}>disconnect</button>
+        <button class="btn quiet" onclick={actions.disconnect}>Disconnect</button>
       </div>
       <div class="chips" role="group" aria-label="Streams">
-        <span class="label">send</span>
+        <span class="label">Send</span>
         <span class="set">
-          <button class="chip" aria-pressed={app.link.send.system} onclick={() => actions.setSend('system', !app.link!.send.system)}><Monitor size={13} strokeWidth={1.75} />system audio</button>
-          <button class="chip" aria-pressed={app.link.send.mic} onclick={() => actions.setSend('mic', !app.link!.send.mic)} aria-label={app.link.send.mic ? 'Turn microphone off' : 'Turn microphone on'}>{#if app.link.send.mic}<Mic size={13} strokeWidth={1.75} />mic on{:else}<MicOff size={13} strokeWidth={1.75} />mic off{/if}</button>
+          <button class="chip" aria-pressed={app.link.send.system} onclick={() => actions.setSend('system', !app.link!.send.system)}><Monitor size={13} strokeWidth={1.75} />System audio</button>
+          <button class="chip" aria-pressed={app.link.send.mic} onclick={() => actions.setSend('mic', !app.link!.send.mic)} aria-label={app.link.send.mic ? 'Turn microphone off' : 'Turn microphone on'}>{#if app.link.send.mic}<Mic size={13} strokeWidth={1.75} />Mic on{:else}<MicOff size={13} strokeWidth={1.75} />Mic off{/if}</button>
         </span>
-        <span class="label">hear</span>
+        <span class="label">Hear</span>
         <span class="set">
-          <button class="chip" aria-pressed={app.link.hear.system} onclick={() => actions.setHear('system', !app.link!.hear.system)}><Monitor size={13} strokeWidth={1.75} />host audio</button>
-          <button class="chip" aria-pressed={app.link.hear.mic} onclick={() => actions.setHear('mic', !app.link!.hear.mic)}><Mic size={13} strokeWidth={1.75} />host mic</button>
+          <button class="chip" aria-pressed={app.link.hear.system} onclick={() => actions.setHear('system', !app.link!.hear.system)}><Monitor size={13} strokeWidth={1.75} />Host audio</button>
+          <button class="chip" aria-pressed={app.link.hear.mic} onclick={() => actions.setHear('mic', !app.link!.hear.mic)}><Mic size={13} strokeWidth={1.75} />Host mic</button>
         </span>
       </div>
     </section>
@@ -76,8 +76,8 @@
   {#if app.hosting}
     <section class="block">
       <div class="head">
-        <span class="label">clients</span>
-        <span class="label" title="Output">to {app.hosting.output}</span>
+        <span class="label">Clients</span>
+        <span class="label" title="Output">To {app.hosting.output}</span>
       </div>
       {#each app.hosting.clients as row (row.id)}
         <ClientRow {row} />
@@ -89,7 +89,7 @@
 
   {#if idle && app.hosts.length > 0}
     <section class="block">
-      <div class="head"><span class="label">hosts on this network</span></div>
+      <div class="head"><span class="label">Hosts on this network</span></div>
       {#each app.hosts as h (h.id)}
         <div class="hostrow" class:blocked={h.blocked}>
           <StatusMark mark={h.blocked ? 'error' : 'live'} />
@@ -98,18 +98,18 @@
             <span class="label">{h.blocked ?? `${h.clients} ${h.clients === 1 ? 'client' : 'clients'}`}</span>
           </div>
           <button class="btn" disabled={!!h.blocked} onclick={() => actions.connect(h.id)}>
-            {h.blocked ? "can't join" : 'connect'}
+            {h.blocked ? "Can't join" : 'Connect'}
           </button>
         </div>
       {/each}
-      <button class="btn quiet also" onclick={actions.becomeHost}>or become host instead</button>
+      <button class="btn quiet also" onclick={actions.becomeHost}>Or become host instead</button>
     </section>
   {/if}
 
   <footer>
-    <button class="btn quiet" onclick={() => actions.openWindow('advanced')}>{QUALITY[app.quality].label.toLowerCase()} · {QUALITY[app.quality].detail.split(',')[0]}</button>
+    <button class="btn quiet" onclick={() => actions.openWindow('advanced')}>{QUALITY[app.quality].label} · {QUALITY[app.quality].detail.split(',')[0]}</button>
     <span class="spacer"></span>
-    <button class="btn quiet" onclick={() => actions.openWindow('devices')}>open aonin</button>
+    <button class="btn quiet" onclick={() => actions.openWindow('devices')}>Open Aonin</button>
     <button class="icon" onclick={actions.quit} aria-label="Quit Aonin"><Power size={14} strokeWidth={1.75} /></button>
   </footer>
 </div>
