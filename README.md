@@ -90,7 +90,13 @@ Run the tests with `cargo test`.
 - [x] Pick audio devices; recover automatically when the output is unplugged or changes
 - [x] Open at login, and an optional "keep Wi-Fi steady" switch on macOS (turns off AWDL)
 - [x] Installers built by GitHub Actions (Windows NSIS, macOS DMG)
-- [ ] Code signing: Windows (e.g. SignPath for open source) and macOS (Apple Developer ID + notarization)
+- [x] Automatic updates, signed
+- [ ] Hand the host role to another device from the host, with every client following it
+- [ ] Private connections: pair devices with a one-time code, with encrypted audio; an optional account later
+- [ ] Android and iOS: listen and send the mic first, then host, then system audio where the OS allows it
+- [ ] Later: code signing for Windows (e.g. SignPath for open source) and macOS (Apple Developer ID + notarization)
+
+See [docs/roadmap.md](docs/roadmap.md) for how each one will be built.
 
 ## License
 
