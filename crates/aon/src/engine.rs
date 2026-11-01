@@ -100,6 +100,7 @@ pub struct Engine {
     last_ack: Mutex<Option<Instant>>,
     /// macOS refused to let us reach the host (Local Network privacy).
     local_net_blocked: std::sync::atomic::AtomicBool,
+    perms: crate::permissions::Checker,
 }
 
 // ---- snapshot: mirrors `AppState` in app/src/lib/state.svelte.ts ----
@@ -108,7 +109,8 @@ pub struct Engine {
 #[serde(rename_all = "camelCase")]
 pub struct Snapshot {
     me: Me,
-    gate: Option<&'static str>,
+    /// What the OS is stopping Aonin from doing (see `permissions`).
+    issues: Vec<&'static str>,
     hosting: Option<Hosting>,
     link: Option<Link>,
     hosts: Vec<HostInfo>,
@@ -292,6 +294,7 @@ impl Engine {
             last_want: Mutex::new(Instant::now()),
             last_ack: Mutex::new(None),
             local_net_blocked: Default::default(),
+            perms: crate::permissions::Checker::start(),
         })
     }
 
@@ -754,6 +757,25 @@ impl Engine {
             }
         });
 
+        // Only raise what matters for what this device is doing right now.
+        let found = self.perms.get();
+        let (mic_in_use, incoming) = {
+            let host = self.host.lock().unwrap();
+            let link = self.link.lock().unwrap();
+            let serving_mic = host.as_ref().is_some_and(|h| h.returns.keys().any(|k| k.3));
+            let sending_mic = link.as_ref().is_some_and(|l| l.mic.is_some());
+            (serving_mic || sending_mic, host.is_some() || link.as_ref().is_some_and(|l| l.back.is_some()))
+        };
+        let issues: Vec<&'static str> = [
+            (self.local_net_blocked.load(Relaxed), "localNetwork"),
+            (found.audio_capture_denied, "audioCapture"),
+            (found.mic_denied && mic_in_use, "microphone"),
+            (found.firewall_missing && incoming, "firewall"),
+        ]
+        .into_iter()
+        .filter_map(|(on, id)| on.then_some(id))
+        .collect();
+
         let prefs = self.prefs.lock().unwrap();
         let devices = Devices {
             output: prefs.output.clone().unwrap_or_default(),
@@ -771,7 +793,7 @@ impl Engine {
         drop(prefs);
         Snapshot {
             me: Me { name: self.me.name.clone(), os: os_name(self.me.os) },
-            gate: self.local_net_blocked.load(Relaxed).then_some("localNetwork"),
+            issues,
             hosting,
             link,
             hosts,
@@ -782,6 +804,13 @@ impl Engine {
             options: Options { reconnect, start_at_login, quiet_wifi, mute_speakers },
             error,
         }
+    }
+
+    /// Fix what the UI shows for an issue, then check again.
+    pub fn fix_issue(&self, issue: &str) -> Result<()> {
+        let result = crate::permissions::fix(issue);
+        self.perms.recheck();
+        result
     }
 
     /// Quit: stop everything but keep the remembered host and role.

@@ -16,6 +16,9 @@ struct Cli {
 enum Cmd {
     /// List audio devices.
     Devices,
+    /// Testing: print what the OS is blocking (permission checks).
+    #[command(hide = true)]
+    Permissions,
     /// Testing: play a sine tone on an output device.
     #[command(hide = true)]
     Tone {
@@ -99,6 +102,12 @@ fn main() -> Result<()> {
     aon::run_speaker_guard_if_asked();
     match Cli::parse().cmd {
         Cmd::Devices => audio::list_devices(),
+        Cmd::Permissions => {
+            let c = aon::permissions::Checker::start();
+            std::thread::sleep(std::time::Duration::from_millis(1500));
+            println!("{:?}", c.get());
+            Ok(())
+        }
         Cmd::Host { output } => {
             let engine = cli_engine(output);
             engine.become_host()?;

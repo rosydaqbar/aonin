@@ -1,6 +1,7 @@
 <script lang="ts">
   import { AudioLines, Download, Info, Headphones, LogIn, Mic, Monitor, MonitorSmartphone, Network, Power, RefreshCw, SlidersHorizontal, Upload, VolumeX, Wifi } from '@lucide/svelte';
   import ClientRow from './ClientRow.svelte';
+  import Issues from './Issues.svelte';
   import StatusMark from './StatusMark.svelte';
   import Switch from './Switch.svelte';
   import { actions, type Section } from './actions';
@@ -50,22 +51,7 @@
     </nav>
 
     <main>
-      {#if app.gate === 'permission'}
-        <div class="gate">
-          <p>Aonin needs permission to capture this Mac's audio.</p>
-          <button class="btn primary" onclick={actions.grantPermission}>Allow audio capture</button>
-        </div>
-      {:else if app.gate === 'localNetwork'}
-        <div class="gate">
-          <p>macOS is blocking Aonin from other computers on this network. Turn on Aonin in Local Network settings.</p>
-          <button class="btn primary" onclick={actions.openLocalNetworkSettings}>Open Local Network settings</button>
-        </div>
-      {:else if app.gate === 'firewall'}
-        <div class="gate">
-          <p>Windows Firewall is stopping other devices from reaching this PC.</p>
-          <button class="btn primary" onclick={actions.allowFirewall}>Allow in firewall</button>
-        </div>
-      {/if}
+      <Issues />
       {#if app.error}
         <p class="alert" role="alert">{app.error}</p>
       {/if}
@@ -295,8 +281,6 @@
     text-align: left;
   }
   .quit:hover { background: var(--recess); color: var(--ink); }
-  .gate { display: flex; align-items: center; gap: 16px; margin-top: 16px; padding: 12px 14px; border-radius: 8px; background: var(--recess); }
-  .gate p { flex: 1; font-weight: 600; }
   main { padding: 8px 28px 28px; overflow-y: auto; }
   h2 { font-size: var(--size); font-weight: 700; }
   .titlebar { display: flex; align-items: center; gap: 14px; margin: 22px 0 8px; min-height: 28px; }

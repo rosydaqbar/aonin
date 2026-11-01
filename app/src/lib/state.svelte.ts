@@ -54,9 +54,12 @@ export interface Stats {
   dropouts: number;
 }
 
+export type Issue = 'localNetwork' | 'audioCapture' | 'microphone' | 'firewall';
+
 export interface AppState {
   me: { name: string; os: Os };
-  gate: null | 'permission' | 'firewall' | 'localNetwork';
+  /** What the OS is stopping Aonin from doing; each shows with its fix. */
+  issues: Issue[];
   hosting: null | { output: string; clients: ClientRow[] };
   link: null | Link;
   hosts: HostInfo[];
@@ -84,7 +87,7 @@ export const QUALITY: Record<Quality, { label: string; detail: string; rate: str
 
 const base: AppState = {
   me: { name: 'PC-Studio', os: 'windows' },
-  gate: null,
+  issues: [],
   hosting: null,
   link: null,
   hosts: [],
@@ -147,9 +150,8 @@ export const DEMOS: Record<string, Partial<AppState>> = {
     hosts: [pcStudio, { id: 'h2', name: 'Studio iMac', os: 'macos', clients: 1, blocked: 'Joining would play your own audio back to you.' }],
   },
   empty: { me: { name: 'Work Laptop', os: 'windows' } },
-  permission: { me: { name: 'Office MacBook', os: 'macos' }, gate: 'permission' },
-  firewall: { gate: 'firewall' },
-  localNetwork: { me: { name: 'Office MacBook', os: 'macos' }, gate: 'localNetwork' },
+  issues: { me: { name: 'Office MacBook', os: 'macos' }, issues: ['localNetwork', 'audioCapture'] },
+  firewall: { hosting: { output: 'USB DAC', clients: [] }, issues: ['firewall'] },
   degraded: {
     hosting: {
       output: 'USB DAC',
@@ -190,7 +192,7 @@ export async function followBackend() {
 
 /** A device reads as "connected somewhere" in the strip. */
 export function roleLine(s: AppState): string {
-  if (s.gate) return 'Setup needed';
+  if (s.issues.length) return 'Needs permission';
   if (s.hosting && s.outputLost) return 'Output lost';
   if (s.hosting && s.link) return 'Hosting · also connected';
   if (s.hosting) {

@@ -109,15 +109,11 @@ async fn check_update(app: AppHandle) -> Result<Option<String>, String> {
     fetch_update(&app).await
 }
 
-/// macOS: open Privacy & Security → Local Network, where Aonin is switched on.
-#[tauri::command]
-fn open_local_network_settings() -> Result<(), String> {
-    #[cfg(target_os = "macos")]
-    std::process::Command::new("open")
-        .arg("x-apple.systempreferences:com.apple.preference.security?Privacy_LocalNetwork")
-        .status()
-        .map_err(err)?;
-    Ok(())
+/// Fix a permission issue: open the right settings page, or add the
+/// Windows Firewall rule after the administrator prompt.
+#[tauri::command(async)]
+fn fix_issue(engine: Eng, issue: String) -> Result<(), String> {
+    engine.fix_issue(&issue).map_err(err)
 }
 
 /// Install the downloaded update and start the new version.
@@ -459,7 +455,7 @@ pub fn run() {
             set_reconnect,
             install_update,
             check_update,
-            open_local_network_settings
+            fix_issue
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");

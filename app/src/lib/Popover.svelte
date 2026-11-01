@@ -1,4 +1,5 @@
 <script lang="ts">
+  import Issues from './Issues.svelte';
   import { ChevronDown, ChevronRight, Mic, MicOff, Monitor, Power } from '@lucide/svelte';
   import ClientRow from './ClientRow.svelte';
   import Grille from './Grille.svelte';
@@ -12,7 +13,7 @@
     : app.link?.status === 'connected' ? 'var(--green)'
     : 'var(--strip-ink-2)'
   );
-  let idle = $derived(!app.gate && !app.hosting && !app.link);
+  let idle = $derived(!app.hosting && !app.link);
 
   // Send/Hear stay folded away until asked for; the choice is remembered here.
   let showStreams = $state(readShow());
@@ -58,22 +59,9 @@
     </div>
   {/if}
 
-  {#if app.gate === 'permission'}
-    <section class="solo">
-      <p>Aonin needs permission to capture this Mac's audio.</p>
-      <button class="btn primary" onclick={actions.grantPermission}>Allow audio capture</button>
-    </section>
-  {:else if app.gate === 'localNetwork'}
-    <section class="solo">
-      <p>macOS is blocking Aonin from other computers on this network.</p>
-      <button class="btn primary" onclick={actions.openLocalNetworkSettings}>Open Local Network settings</button>
-    </section>
-  {:else if app.gate === 'firewall'}
-    <section class="solo">
-      <p>Windows Firewall is stopping other devices from reaching this PC.</p>
-      <button class="btn primary" onclick={actions.allowFirewall}>Allow in firewall</button>
-    </section>
-  {:else if idle && app.hosts.length === 0}
+  <Issues compact />
+
+  {#if idle && app.hosts.length === 0}
     <section class="solo">
       <p>No host on this network yet.</p>
       <button class="btn primary" onclick={actions.becomeHost}>Become host</button>

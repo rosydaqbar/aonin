@@ -1,7 +1,7 @@
 // User intents. In the Tauri app each one becomes a backend command; in the
 // browser design review they mutate the demo state so the UI stays clickable.
 
-import { app, inTauri } from './state.svelte';
+import { app, inTauri, type Issue } from './state.svelte';
 
 export type Section = 'devices' | 'audio' | 'network' | 'advanced' | 'about';
 
@@ -32,15 +32,10 @@ export const actions = {
   async disconnect() {
     if (!(await call('disconnect'))) app.link = null;
   },
-  async grantPermission() {
-    if (!(await call('request_permission'))) app.gate = null;
+  async fixIssue(issue: Issue) {
+    if (!(await call('fix_issue', { issue }))) app.issues = app.issues.filter((i) => i !== issue);
   },
-  async openLocalNetworkSettings() {
-    await call('open_local_network_settings');
-  },
-  async allowFirewall() {
-    if (!(await call('allow_firewall'))) app.gate = null;
-  },
+
   async openWindow(section: Section) {
     if (!(await call('open_window', { section }))) location.href = `/?demo=${new URLSearchParams(location.search).get('demo') ?? 'host'}#${section}`;
   },
