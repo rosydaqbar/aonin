@@ -81,20 +81,32 @@ fn start_updater(app: AppHandle) {
     std::thread::Builder::new()
         .name("aonin-updater".into())
         .spawn(move || loop {
-            tauri::async_runtime::block_on(async {
-                let Ok(updater) = app.updater() else { return };
-                let Ok(Some(update)) = updater.check().await else { return };
-                let pending = app.state::<Pending>();
-                if pending.0.lock().unwrap().as_ref().is_some_and(|(u, _)| u.version == update.version) {
-                    return;
-                }
-                if let Ok(bytes) = update.download(|_, _| {}, || {}).await {
-                    *pending.0.lock().unwrap() = Some((update, bytes));
-                }
-            });
+            let _ = tauri::async_runtime::block_on(fetch_update(&app));
             std::thread::sleep(UPDATE_EVERY);
         })
         .expect("spawn updater");
+}
+
+/// Ask GitHub for a newer release and download it. Returns the version that
+/// is ready to install, or `None` when this is the latest.
+async fn fetch_update(app: &AppHandle) -> Result<Option<String>, String> {
+    let Some(update) = app.updater().map_err(err)?.check().await.map_err(err)? else {
+        return Ok(None);
+    };
+    let pending = app.state::<Pending>();
+    if pending.0.lock().unwrap().as_ref().is_some_and(|(u, _)| u.version == update.version) {
+        return Ok(Some(update.version));
+    }
+    let bytes = update.download(|_, _| {}, || {}).await.map_err(err)?;
+    let version = update.version.clone();
+    *pending.0.lock().unwrap() = Some((update, bytes));
+    Ok(Some(version))
+}
+
+/// About → Check for updates.
+#[tauri::command]
+async fn check_update(app: AppHandle) -> Result<Option<String>, String> {
+    fetch_update(&app).await
 }
 
 /// Install the downloaded update and start the new version.
@@ -434,7 +446,8 @@ pub fn run() {
             set_mute_speakers,
             set_device,
             set_reconnect,
-            install_update
+            install_update,
+            check_update
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");

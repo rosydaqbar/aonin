@@ -3,7 +3,7 @@
 
 import { app, inTauri } from './state.svelte';
 
-export type Section = 'devices' | 'audio' | 'network' | 'advanced';
+export type Section = 'devices' | 'audio' | 'network' | 'advanced' | 'about';
 
 
 async function call(cmd: string, args?: Record<string, unknown>): Promise<boolean> {
@@ -67,6 +67,19 @@ export const actions = {
   },
   async setMuteSpeakers(on: boolean) {
     if (!(await call('set_mute_speakers', { on }))) app.options.muteSpeakers = on;
+  },
+  /** The version ready to install, null when up to date; throws if the check failed. */
+  async checkUpdate(): Promise<string | null> {
+    if (!inTauri) return app.update;
+    const { invoke } = await import('@tauri-apps/api/core');
+    const version = await invoke<string | null>('check_update');
+    app.update = version;
+    return version;
+  },
+  async openUrl(url: string) {
+    if (!inTauri) return void window.open(url, '_blank');
+    const { openUrl } = await import('@tauri-apps/plugin-opener');
+    await openUrl(url);
   },
   async installUpdate() {
     await call('install_update');

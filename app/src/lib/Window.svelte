@@ -1,13 +1,25 @@
 <script lang="ts">
-  import { AudioLines, Download, Headphones, LogIn, Mic, Monitor, MonitorSmartphone, Network, Power, RefreshCw, SlidersHorizontal, Upload, VolumeX, Wifi } from '@lucide/svelte';
+  import { AudioLines, Download, Info, Headphones, LogIn, Mic, Monitor, MonitorSmartphone, Network, Power, RefreshCw, SlidersHorizontal, Upload, VolumeX, Wifi } from '@lucide/svelte';
   import ClientRow from './ClientRow.svelte';
   import StatusMark from './StatusMark.svelte';
   import Switch from './Switch.svelte';
   import { actions, type Section } from './actions';
   import { app, fmtMs, QUALITY, roleLine, type Quality } from './state.svelte';
 
-  const sections: Section[] = ['devices', 'audio', 'network', 'advanced'];
-  const sectionIcons = { devices: MonitorSmartphone, audio: AudioLines, network: Network, advanced: SlidersHorizontal };
+  const sections: Section[] = ['devices', 'audio', 'network', 'advanced', 'about'];
+  const sectionIcons = { devices: MonitorSmartphone, audio: AudioLines, network: Network, advanced: SlidersHorizontal, about: Info };
+  const REPO = 'https://github.com/rosydaqbar/aonin';
+
+  // About → Check for updates: idle, checking, or the outcome of the last check.
+  let check = $state<'idle' | 'checking' | 'latest' | 'failed'>('idle');
+  async function checkNow() {
+    check = 'checking';
+    try {
+      check = (await actions.checkUpdate()) ? 'idle' : 'latest';
+    } catch {
+      check = 'failed';
+    }
+  }
   let section = $state<Section>(readHash());
 
   function readHash(): Section {
@@ -186,6 +198,50 @@
           <div class="titlebar"><h2>Wi-Fi</h2></div>
           <Switch icon={Wifi} label="Keep Wi-Fi steady" hint="Turns off AirDrop and Handoff scanning, which makes Mac Wi-Fi stall every few seconds. Asks for your password; back on when you switch this off or restart." checked={app.options.quietWifi} onchange={(on) => actions.setQuietWifi(on)} />
         {/if}
+      {:else if section === 'about'}
+        <div class="about">
+          <img src="/favicon.png" alt="" width="64" height="64" />
+          <div>
+            <h2>Aonin</h2>
+            <p class="label">Version {app.version}</p>
+          </div>
+        </div>
+        <p class="overview">Aonin brings the audio of the computers on your local network into one place, in real time and lossless over Wi-Fi. Any computer can host; the others play their audio there and can hear the host back. No account and no server: everything stays on your network.</p>
+
+        <div class="titlebar"><h2>Updates</h2></div>
+        <div class="update">
+          <span class="icon" aria-hidden="true"><Download size={16} strokeWidth={1.75} /></span>
+          <span class="text">
+            {#if app.update}
+              <span>Aonin {app.update} is ready</span>
+              <span class="label">Restarting takes a few seconds. Aonin reconnects after.</span>
+            {:else if check === 'checking'}
+              <span>Checking for updates…</span>
+              <span class="label">A newer version downloads in the background.</span>
+            {:else if check === 'latest'}
+              <span>Aonin {app.version} is the latest version</span>
+              <span class="label">Aonin also checks by itself every few hours.</span>
+            {:else if check === 'failed'}
+              <span>Couldn’t check for updates</span>
+              <span class="label bad">GitHub couldn’t be reached. Check the internet connection and try again.</span>
+            {:else}
+              <span>Aonin {app.version}</span>
+              <span class="label">Checks for updates by itself and downloads them in the background.</span>
+            {/if}
+          </span>
+          {#if app.update}
+            <button class="btn primary" onclick={actions.installUpdate}>Restart to update</button>
+          {:else}
+            <button class="btn" onclick={checkNow} disabled={check === 'checking'}>Check for updates</button>
+          {/if}
+        </div>
+
+        <div class="titlebar"><h2>License</h2></div>
+        <p class="legal">© 2026 Rosyd Aqbar. Aonin is free software under the GNU General Public License, version 3 or later. It comes with no warranty.</p>
+        <p class="links">
+          <button class="link" onclick={() => actions.openUrl(REPO)}>Source code on GitHub</button>
+          <button class="link" onclick={() => actions.openUrl(REPO + '/blob/main/LICENSE')}>Read the license</button>
+        </p>
       {:else}
         <div class="titlebar"><h2>Quality</h2><span class="label">For audio this device sends</span></div>
         <div class="radios" role="radiogroup" aria-label="Quality">
@@ -202,15 +258,6 @@
         <div class="titlebar"><h2>Startup</h2></div>
         <Switch icon={RefreshCw} label="Reconnect automatically" hint="Join the last host as soon as Aonin opens" checked={app.options.reconnect} onchange={(on) => actions.setReconnect(on)} />
         <Switch icon={LogIn} label="Open at login" hint="Start Aonin in the background when you sign in" checked={app.options.startAtLogin} onchange={(on) => actions.setStartAtLogin(on)} />
-        <div class="titlebar"><h2>Updates</h2></div>
-        <div class="update">
-          <span class="icon" aria-hidden="true"><Download size={16} strokeWidth={1.75} /></span>
-          <span class="text">
-            <span>{app.update ? `Aonin ${app.update} is ready` : `Aonin ${app.version}`}</span>
-            <span class="label">{app.update ? 'Restarting takes a few seconds. Streams pick up again after.' : 'Checks for updates automatically and downloads them in the background.'}</span>
-          </span>
-          {#if app.update}<button class="btn primary" onclick={actions.installUpdate}>Restart to update</button>{/if}
-        </div>
       {/if}
     </main>
   </div>
@@ -259,6 +306,13 @@
   .linkhead { display: flex; align-items: center; gap: 12px; min-height: 52px; border-bottom: 1px solid var(--line); }
   .linkhead .name { font-weight: 700; flex: 1; }
   .grid2 { display: grid; grid-template-columns: 1fr 1fr; column-gap: 36px; align-items: start; }
+  .about { display: flex; align-items: center; gap: 16px; margin: 22px 0 14px; }
+  .about img { border-radius: 14px; }
+  .about h2 { font-size: 20px; }
+  .overview { max-width: 62ch; line-height: 1.55; }
+  .legal { max-width: 62ch; line-height: 1.55; color: var(--ink-2); padding-top: 4px; }
+  .links { display: flex; gap: 18px; margin-top: 10px; }
+  .link { background: none; border: 0; padding: 0; font: inherit; color: var(--ink); text-decoration: underline; text-underline-offset: 3px; cursor: pointer; }
   .update { display: flex; align-items: center; gap: 12px; min-height: 52px; border-bottom: 1px solid var(--line); }
   .update .icon { display: grid; place-items: center; width: 28px; height: 28px; border-radius: 7px; background: var(--recess); color: var(--ink-2); flex: none; }
   .update .text { flex: 1; display: flex; flex-direction: column; gap: 1px; min-width: 0; }
