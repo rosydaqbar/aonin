@@ -74,8 +74,7 @@ cargo run --release -p aon -- send 192.168.1.20 --source mic
 | `crates/aon-core` | Platform-independent core: wire protocol, jitter buffer, resampler |
 | `crates/aon` | Audio I/O (cpal), UDP sender and hub, discovery, host/client engine, CLI |
 | `app` | Desktop app: Tauri 2 shell (tray, popover, window) and the Svelte UI |
-| `app/icons-src` | Icon sources (SVG) and rendered PNGs |
-| `icon` | Original icon pack |
+| `app/icons-src` | Icon sources (SVG) |
 
 Run the tests with `cargo test`.
 
