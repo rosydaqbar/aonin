@@ -6,6 +6,8 @@
   <string>Aonin sends this Mac's sound to the host you connect to.</string>
   <key>NSMicrophoneUsageDescription</key>
   <string>Aonin sends your microphone to the host when you turn on Send microphone.</string>
+  <key>NSLocalNetworkUsageDescription</key>
+  <string>Aonin streams audio between the computers on your local network.</string>
   <key>LSUIElement</key>
   <true/>
 </dict>

@@ -56,7 +56,7 @@ export interface Stats {
 
 export interface AppState {
   me: { name: string; os: Os };
-  gate: null | 'permission' | 'firewall';
+  gate: null | 'permission' | 'firewall' | 'localNetwork';
   hosting: null | { output: string; clients: ClientRow[] };
   link: null | Link;
   hosts: HostInfo[];
@@ -149,6 +149,7 @@ export const DEMOS: Record<string, Partial<AppState>> = {
   empty: { me: { name: 'Work Laptop', os: 'windows' } },
   permission: { me: { name: 'Office MacBook', os: 'macos' }, gate: 'permission' },
   firewall: { gate: 'firewall' },
+  localNetwork: { me: { name: 'Office MacBook', os: 'macos' }, gate: 'localNetwork' },
   degraded: {
     hosting: {
       output: 'USB DAC',

@@ -98,6 +98,8 @@ pub struct Engine {
     ctrl: UdpSocket,
     last_want: Mutex<Instant>,
     last_ack: Mutex<Option<Instant>>,
+    /// macOS refused to let us reach the host (Local Network privacy).
+    local_net_blocked: std::sync::atomic::AtomicBool,
 }
 
 // ---- snapshot: mirrors `AppState` in app/src/lib/state.svelte.ts ----
@@ -289,6 +291,7 @@ impl Engine {
             },
             last_want: Mutex::new(Instant::now()),
             last_ack: Mutex::new(None),
+            local_net_blocked: Default::default(),
         })
     }
 
@@ -499,7 +502,10 @@ impl Engine {
     fn send_want(&self, host: SocketAddr, port: u16, hear: Sends) {
         let mut buf = Vec::new();
         protocol::encode_want(&mut buf, self.me.device, port, hear.system, hear.mic);
-        let _ = self.ctrl.send_to(&buf, host);
+        // macOS answers "no route to host" (EHOSTUNREACH) for every local
+        // address while Aonin lacks Local Network access; nothing gets through.
+        let blocked = matches!(self.ctrl.send_to(&buf, host), Err(e) if cfg!(target_os = "macos") && e.raw_os_error() == Some(65));
+        self.local_net_blocked.store(blocked, Relaxed);
     }
 
     /// Ask the host to stream its own audio and/or mic back to us, played on
@@ -765,7 +771,7 @@ impl Engine {
         drop(prefs);
         Snapshot {
             me: Me { name: self.me.name.clone(), os: os_name(self.me.os) },
-            gate: None,
+            gate: self.local_net_blocked.load(Relaxed).then_some("localNetwork"),
             hosting,
             link,
             hosts,

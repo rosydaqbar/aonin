@@ -63,6 +63,11 @@
       <p>Aonin needs permission to capture this Mac's audio.</p>
       <button class="btn primary" onclick={actions.grantPermission}>Allow audio capture</button>
     </section>
+  {:else if app.gate === 'localNetwork'}
+    <section class="solo">
+      <p>macOS is blocking Aonin from other computers on this network.</p>
+      <button class="btn primary" onclick={actions.openLocalNetworkSettings}>Open Local Network settings</button>
+    </section>
   {:else if app.gate === 'firewall'}
     <section class="solo">
       <p>Windows Firewall is stopping other devices from reaching this PC.</p>

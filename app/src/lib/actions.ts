@@ -35,6 +35,9 @@ export const actions = {
   async grantPermission() {
     if (!(await call('request_permission'))) app.gate = null;
   },
+  async openLocalNetworkSettings() {
+    await call('open_local_network_settings');
+  },
   async allowFirewall() {
     if (!(await call('allow_firewall'))) app.gate = null;
   },
