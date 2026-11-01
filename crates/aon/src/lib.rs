@@ -9,3 +9,12 @@ pub mod net;
 mod macloop;
 #[cfg(windows)]
 mod winloop;
+#[cfg(windows)]
+mod speakers;
+
+/// If this process was started as Aonin's speaker guard (Windows), run it
+/// and exit. Call first thing in `main`.
+pub fn run_speaker_guard_if_asked() {
+    #[cfg(windows)]
+    speakers::run_guard_if_asked();
+}

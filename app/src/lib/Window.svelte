@@ -178,6 +178,15 @@
             </label>
           {/each}
         </div>
+        <div class="titlebar"><h2>Speakers</h2></div>
+        <Switch
+          label="Mute speakers while sending"
+          hint={app.me.os === 'macos'
+            ? 'This Mac stays quiet while its audio plays on a host. What Aonin plays still comes through.'
+            : 'This PC stays quiet while its audio plays on a host, including what Aonin plays. Back on when sending stops.'}
+          checked={app.options.muteSpeakers}
+          onchange={(on) => actions.setMuteSpeakers(on)}
+        />
         <div class="titlebar"><h2>Startup</h2></div>
         <Switch label="Reconnect automatically" hint="Join the last host as soon as Aonin opens" checked={app.options.reconnect} onchange={(on) => actions.setReconnect(on)} />
         <Switch label="Open at login" hint="Start Aonin in the background when you sign in" checked={app.options.startAtLogin} onchange={(on) => actions.setStartAtLogin(on)} />

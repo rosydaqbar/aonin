@@ -60,13 +60,18 @@ pub struct Capture(#[allow(dead_code)] Box<dyn std::any::Any>);
 /// System audio never includes what Aonin itself plays: on Windows the
 /// default source uses process loopback excluding this process, and on macOS
 /// a process tap on the chosen output excludes it.
-pub fn start_capture(source: Source, name: Option<&str>) -> Result<(Capture, Consumer<f32>, u32)> {
+///
+/// `mute` silences the speakers being captured for as long as the capture
+/// runs, while the stream itself keeps the audio.
+pub fn start_capture(source: Source, name: Option<&str>, mute: bool) -> Result<(Capture, Consumer<f32>, u32)> {
+    let mute = mute && matches!(source, Source::System);
     #[cfg(windows)]
     if matches!(source, Source::System) && name.is_none() {
         match crate::winloop::start() {
             Ok((guard, rx, rate)) => {
                 println!("Capturing System from every app except Aonin ({rate} Hz)");
-                return Ok((Capture(Box::new(guard)), rx, rate));
+                let muted = if mute { crate::speakers::mute(None) } else { None };
+                return Ok((Capture(Box::new((guard, muted))), rx, rate));
             }
             Err(e) => eprintln!("process loopback unavailable ({e}); falling back to device loopback"),
         }
@@ -75,15 +80,21 @@ pub fn start_capture(source: Source, name: Option<&str>) -> Result<(Capture, Con
     #[cfg(target_os = "macos")]
     if matches!(source, Source::System) {
         let output = pick(host.output_devices()?, host.default_output_device(), name)?;
-        let (tap, device) = crate::macloop::start(output.id()?.id())?;
+        let (tap, device) = crate::macloop::start(output.id()?.id(), mute)?;
         let supported = device.default_input_config()?;
         println!("Capturing System from \"{output}\", every app except Aonin ({} Hz)", supported.config().sample_rate);
         return run_capture(device, supported, Some(tap));
     }
+    #[cfg(not(target_os = "macos"))]
+    let mut speakers = None;
     let (device, supported) = match source {
         Source::System => {
             let d = pick(host.output_devices()?, host.default_output_device(), name)?;
             let c = d.default_output_config()?;
+            #[cfg(windows)]
+            if mute {
+                speakers = crate::speakers::mute(d.id().ok().as_ref().map(|i| i.id()));
+            }
             (d, c)
         }
         Source::Mic => {
@@ -93,6 +104,9 @@ pub fn start_capture(source: Source, name: Option<&str>) -> Result<(Capture, Con
         }
     };
     println!("Capturing {source:?} from \"{device}\" ({} ch, {} Hz, {:?})", supported.channels(), supported.sample_rate(), supported.sample_format());
+    #[cfg(not(target_os = "macos"))]
+    return run_capture(device, supported, speakers);
+    #[cfg(target_os = "macos")]
     run_capture(device, supported, None::<()>)
 }
 

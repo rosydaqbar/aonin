@@ -75,6 +75,8 @@ pub struct Prefs {
     /// Shown in the UI; the desktop shell applies them.
     pub start_at_login: bool,
     pub quiet_wifi: bool,
+    /// Silence this computer's speakers while it sends its system audio.
+    pub mute_speakers: bool,
 }
 
 #[derive(Clone, Copy, Debug)]
@@ -205,6 +207,7 @@ struct Options {
     reconnect: bool,
     start_at_login: bool,
     quiet_wifi: bool,
+    mute_speakers: bool,
 }
 
 impl Snapshot {
@@ -263,6 +266,9 @@ fn meter(peak: f32) -> f32 {
 
 impl Engine {
     pub fn new(device: u64, name: String, prefs: Prefs) -> Arc<Self> {
+        // Speakers a crashed run left muted come back on.
+        #[cfg(windows)]
+        crate::speakers::recover();
         let os = if cfg!(target_os = "macos") { Os::MacOs } else { Os::Windows };
         let disco = Arc::new(Discovery::default());
         *disco.me.lock().unwrap() = Advert { id: device, name: name.clone(), macos: os == Os::MacOs, port: DEFAULT_PORT, ..Default::default() };
@@ -327,6 +333,15 @@ impl Engine {
                     self.set_send(source, true);
                 }
             }
+        }
+    }
+
+    /// Mute or unmute the speakers while sending; a running system stream restarts.
+    pub fn set_mute_speakers(&self, on: bool) {
+        self.prefs.lock().unwrap().mute_speakers = on;
+        if self.link.lock().unwrap().as_ref().is_some_and(|l| l.system.is_some()) {
+            self.set_send(Source::System, false);
+            self.set_send(Source::System, true);
         }
     }
 
@@ -407,13 +422,13 @@ impl Engine {
         let shared = Arc::new(SendShared::default());
         let s = shared.clone();
         let who = self.me.clone();
-        let (device, quality) = {
+        let (device, quality, mute) = {
             let p = self.prefs.lock().unwrap();
             let device = match source {
                 Source::System => p.system_source.clone(),
                 Source::Mic => p.mic.clone(),
             };
-            (device, p.quality)
+            (device, p.quality, p.mute_speakers)
         };
         let thread = std::thread::Builder::new()
             .name(format!("aonin-send-{source:?}"))
@@ -423,7 +438,7 @@ impl Engine {
                     Source::Mic => audio::Source::Mic,
                 };
                 let run = || -> Result<()> {
-                    let (_stream, cap, rate) = audio::start_capture(kind, device.as_deref())?;
+                    let (_stream, cap, rate) = audio::start_capture(kind, device.as_deref(), mute)?;
                     net::run_sender(SendConfig { hub: addr, who, source, quality, drop_percent: 0, verbose: false }, cap, rate, &s)
                 };
                 if let Err(e) = run() {
@@ -746,7 +761,7 @@ impl Engine {
         // Copy what the snapshot needs and release the lock here: a guard
         // taken inside the struct literal below would live to the end of the
         // statement, and a second one would deadlock.
-        let (quality, start_at_login, quiet_wifi) = (prefs.quality.name(), prefs.start_at_login, prefs.quiet_wifi);
+        let (quality, start_at_login, quiet_wifi, mute_speakers) = (prefs.quality.name(), prefs.start_at_login, prefs.quiet_wifi, prefs.mute_speakers);
         drop(prefs);
         Snapshot {
             me: Me { name: self.me.name.clone(), os: os_name(self.me.os) },
@@ -758,7 +773,7 @@ impl Engine {
             output_lost,
             stats,
             devices,
-            options: Options { reconnect, start_at_login, quiet_wifi },
+            options: Options { reconnect, start_at_login, quiet_wifi, mute_speakers },
             error,
         }
     }
@@ -789,6 +804,7 @@ mod tests {
             quality: Quality::Lossless,
             start_at_login: false,
             quiet_wifi: false,
+            mute_speakers: false,
         };
         let engine = Engine::new(2, "test".into(), prefs);
         engine.become_host().unwrap();
@@ -815,6 +831,7 @@ mod tests {
                 quality: Quality::Cd,
                 start_at_login: true,
                 quiet_wifi: false,
+                mute_speakers: false,
             };
             let engine = Engine::new(1, "test".into(), prefs);
             let snaps: Vec<String> = (0..3).map(|_| engine.tick().quality.to_string()).collect();

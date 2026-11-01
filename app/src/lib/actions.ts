@@ -65,6 +65,9 @@ export const actions = {
   async setQuietWifi(on: boolean) {
     if (!(await call('set_quiet_wifi', { on }))) app.options.quietWifi = on;
   },
+  async setMuteSpeakers(on: boolean) {
+    if (!(await call('set_mute_speakers', { on }))) app.options.muteSpeakers = on;
+  },
   async setQuality(quality: 'lossless' | 'cd' | 'balanced' | 'saver') {
     if (!(await call('set_quality', { quality }))) app.quality = quality;
   },

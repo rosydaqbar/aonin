@@ -38,6 +38,8 @@ struct Config {
     quality: Option<String>,
     #[serde(default)]
     quiet_wifi: bool,
+    #[serde(default)]
+    mute_speakers: Option<bool>,
 }
 
 fn config_path(app: &AppHandle) -> Option<PathBuf> {
@@ -120,6 +122,15 @@ fn set_start_at_login(app: AppHandle, engine: Eng, on: bool) -> Result<(), Strin
     if on { launcher.enable() } else { launcher.disable() }.map_err(err)?;
     engine.prefs().start_at_login = launcher.is_enabled().unwrap_or(on);
     Ok(())
+}
+
+/// Silence this computer's speakers while it sends; a running stream restarts.
+#[tauri::command(async)]
+fn set_mute_speakers(app: AppHandle, engine: Eng, on: bool) {
+    engine.set_mute_speakers(on);
+    let mut cfg = load_config(&app);
+    cfg.mute_speakers = Some(on);
+    save_config(&app, &cfg);
 }
 
 /// macOS: AirDrop/Handoff (AWDL) makes Wi-Fi stall every few seconds while
@@ -318,6 +329,7 @@ pub fn run() {
                 quality: cfg.quality.as_deref().and_then(aon_core::protocol::Quality::from_name).unwrap_or_default(),
                 start_at_login: app.autolaunch().is_enabled().unwrap_or(false),
                 quiet_wifi: cfg.quiet_wifi,
+                mute_speakers: cfg.mute_speakers.unwrap_or(true),
             };
             let engine = Engine::new(cfg.device, name, prefs);
             // Pick up the role this device had when Aonin last ran.
@@ -367,6 +379,7 @@ pub fn run() {
             set_quality,
             set_start_at_login,
             set_quiet_wifi,
+            set_mute_speakers,
             set_device,
             set_reconnect
         ])

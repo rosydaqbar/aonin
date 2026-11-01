@@ -65,7 +65,7 @@ export interface AppState {
   stats: Stats[];
   /** Chosen device names; '' follows the system default. */
   devices: { outputs: string[]; mics: string[]; output: string; mic: string; systemSource: string; defaultOutput: string; defaultMic: string };
-  options: { reconnect: boolean; startAtLogin: boolean; quietWifi: boolean };
+  options: { reconnect: boolean; startAtLogin: boolean; quietWifi: boolean; muteSpeakers: boolean };
   /** Hosting or discovery failed to start. */
   error?: string | null;
 }
@@ -97,7 +97,7 @@ const base: AppState = {
     defaultOutput: 'Speakers (USB DAC)',
     defaultMic: 'USB Microphone',
   },
-  options: { reconnect: true, startAtLogin: true, quietWifi: false },
+  options: { reconnect: true, startAtLogin: true, quietWifi: false, muteSpeakers: true },
 };
 
 const clients: ClientRow[] = [

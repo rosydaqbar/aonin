@@ -112,8 +112,11 @@ fn aggregate_properties(tap_uid: &NSString, uid: &str, name: &str) -> CFRetained
 }
 
 /// Tap the output of the device with this Core Audio UID, minus Aonin's own
-/// audio. Returns the tap guard and the cpal input device that reads it.
-pub fn start(device_uid: &str) -> Result<(Tap, cpal::Device)> {
+/// audio. With `mute`, the device goes silent while the tap is read (Aonin's
+/// own playback still plays). Returns the tap guard and the cpal input device
+/// that reads it. Core Audio removes the tap if Aonin dies, so a crash never
+/// leaves the speakers muted.
+pub fn start(device_uid: &str, mute: bool) -> Result<(Tap, cpal::Device)> {
     let me = own_process_object().ok_or_else(|| anyhow!("Core Audio has no process object for Aonin"))?;
     let n = INSTANCE.fetch_add(1, Relaxed);
     let pid = std::process::id();
@@ -129,7 +132,7 @@ pub fn start(device_uid: &str) -> Result<(Tap, cpal::Device)> {
             &NSString::from_str(device_uid),
             0,
         );
-        desc.setMuteBehavior(CATapMuteBehavior::Unmuted); // the speakers keep playing
+        desc.setMuteBehavior(if mute { CATapMuteBehavior::MutedWhenTapped } else { CATapMuteBehavior::Unmuted });
         desc.setName(&NSString::from_str(&format!("Aonin capture {pid}.{n}")));
         desc.setPrivate(true);
         desc.setExclusive(true); // the process list is what gets left out

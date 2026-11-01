@@ -89,10 +89,14 @@ enum Cmd {
         /// device. System capture should leave it out.
         #[arg(long, hide = true)]
         self_tone: Option<String>,
+        /// Silence this computer's speakers while sending (the stream keeps the audio).
+        #[arg(long)]
+        mute_speakers: bool,
     },
 }
 
 fn main() -> Result<()> {
+    aon::run_speaker_guard_if_asked();
     match Cli::parse().cmd {
         Cmd::Devices => audio::list_devices(),
         Cmd::Host { output } => {
@@ -153,10 +157,10 @@ fn main() -> Result<()> {
             let follow = output.is_none();
             net::run_hub(port, || audio::start_output(output.as_deref()), follow, &net::HubShared::default(), true)
         }
-        Cmd::Send { hub, source, device, drop_percent, self_tone, quality } => {
+        Cmd::Send { hub, source, device, drop_percent, self_tone, quality, mute_speakers } => {
             let hub = resolve(&hub)?;
             let _tone = self_tone.map(|out| audio::play_tone(Some(&out), 440.0, 0.01)).transpose()?;
-            let (_stream, rx, rate) = audio::start_capture(source, device.as_deref())?;
+            let (_stream, rx, rate) = audio::start_capture(source, device.as_deref(), mute_speakers)?;
             let os = if cfg!(target_os = "macos") { aon_core::protocol::Os::MacOs } else { aon_core::protocol::Os::Windows };
             let name = gethostname::gethostname().to_string_lossy().into_owned();
             let who = net::Identity { device: std::process::id() as u64, name, os };
@@ -176,7 +180,7 @@ fn cli_engine(output: Option<String>) -> std::sync::Arc<aon::engine::Engine> {
     use std::hash::{BuildHasher, RandomState};
     let id = RandomState::new().hash_one(std::time::Instant::now()) | 1;
     let name = gethostname::gethostname().to_string_lossy().into_owned();
-    let prefs = aon::engine::Prefs { reconnect: false, last_host: None, was_hosting: false, output, system_source: None, mic: None, quality: Default::default(), start_at_login: false, quiet_wifi: false };
+    let prefs = aon::engine::Prefs { reconnect: false, last_host: None, was_hosting: false, output, system_source: None, mic: None, quality: Default::default(), start_at_login: false, quiet_wifi: false, mute_speakers: false };
     aon::engine::Engine::new(id, name, prefs)
 }
 
