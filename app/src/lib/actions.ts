@@ -68,6 +68,9 @@ export const actions = {
   async setMuteSpeakers(on: boolean) {
     if (!(await call('set_mute_speakers', { on }))) app.options.muteSpeakers = on;
   },
+  async installUpdate() {
+    await call('install_update');
+  },
   async setQuality(quality: 'lossless' | 'cd' | 'balanced' | 'saver') {
     if (!(await call('set_quality', { quality }))) app.quality = quality;
   },

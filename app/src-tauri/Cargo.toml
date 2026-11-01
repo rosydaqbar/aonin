@@ -1,6 +1,6 @@
 [package]
 name = "aonin"
-version = "0.1.0"
+version = "0.1.1"
 description = "Lossless real-time audio over the local network"
 authors = ["Aonin"]
 edition = "2024"
@@ -28,5 +28,6 @@ aon = { version = "0.1.0", path = "../../crates/aon" }
 aon-core = { version = "0.1.0", path = "../../crates/aon-core" }
 gethostname = "1.1.0"
 tauri-plugin-autostart = "2"
+tauri-plugin-updater = "2"
 
 

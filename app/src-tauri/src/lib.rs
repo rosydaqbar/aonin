@@ -14,6 +14,7 @@ use tauri::tray::{MouseButton, MouseButtonState, TrayIcon, TrayIconBuilder, Tray
 use tauri::{AppHandle, Emitter, Manager, State, WebviewUrl, WebviewWindow, WebviewWindowBuilder, WindowEvent};
 use tauri_plugin_autostart::{MacosLauncher, ManagerExt};
 use tauri_plugin_positioner::{Position, WindowExt};
+use tauri_plugin_updater::{Update, UpdaterExt};
 
 const POPOVER: &str = "popover";
 const MAIN: &str = "main";
@@ -66,6 +67,51 @@ fn save_config(app: &AppHandle, cfg: &Config) {
 }
 
 type Eng<'a> = State<'a, Arc<Engine>>;
+
+/// A downloaded, signature-checked update waiting for "Restart to update".
+#[derive(Default)]
+struct Pending(std::sync::Mutex<Option<(Update, Vec<u8>)>>);
+
+const UPDATE_EVERY: Duration = Duration::from_secs(6 * 3600);
+
+/// Check GitHub Releases at launch and every few hours. A newer build is
+/// downloaded in the background (the updater verifies its signature) and
+/// offered in the UI; nothing installs until the user asks.
+fn start_updater(app: AppHandle) {
+    std::thread::Builder::new()
+        .name("aonin-updater".into())
+        .spawn(move || loop {
+            tauri::async_runtime::block_on(async {
+                let Ok(updater) = app.updater() else { return };
+                let Ok(Some(update)) = updater.check().await else { return };
+                let pending = app.state::<Pending>();
+                if pending.0.lock().unwrap().as_ref().is_some_and(|(u, _)| u.version == update.version) {
+                    return;
+                }
+                if let Ok(bytes) = update.download(|_, _| {}, || {}).await {
+                    *pending.0.lock().unwrap() = Some((update, bytes));
+                }
+            });
+            std::thread::sleep(UPDATE_EVERY);
+        })
+        .expect("spawn updater");
+}
+
+/// Install the downloaded update and start the new version.
+#[tauri::command(async)]
+fn install_update(app: AppHandle, engine: Eng) -> Result<(), String> {
+    let Some((update, bytes)) = app.state::<Pending>().0.lock().unwrap().take() else {
+        return Err("No update is ready.".into());
+    };
+    // Stop streaming first: peers see a clean exit and muted speakers come back.
+    engine.shutdown();
+    if let Err(e) = update.install(bytes) {
+        eprintln!("update failed: {e}");
+    }
+    // On Windows the installer has already taken over; elsewhere this opens
+    // the new version (or the old one again if installing failed).
+    app.restart();
+}
 
 fn err(e: impl std::fmt::Display) -> String {
     e.to_string()
@@ -204,7 +250,10 @@ fn start_poller(app: AppHandle, engine: Arc<Engine>, mut cfg: Config) {
         .name("aonin-ui".into())
         .spawn(move || loop {
             let snap = engine.tick();
-            let _ = app.emit("state", &snap);
+            let mut state = serde_json::to_value(&snap).unwrap_or_default();
+            state["version"] = app.package_info().version.to_string().into();
+            state["update"] = app.state::<Pending>().0.lock().unwrap().as_ref().map(|(u, _)| u.version.clone()).into();
+            let _ = app.emit("state", &state);
             if engine.last_host() != cfg.last_host || engine.was_hosting() != cfg.was_hosting {
                 // Reload first: other settings may have been saved meanwhile.
                 cfg = load_config(&app);
@@ -315,6 +364,7 @@ pub fn run() {
         .plugin(tauri_plugin_opener::init())
         .plugin(tauri_plugin_positioner::init())
         .plugin(tauri_plugin_autostart::init(MacosLauncher::LaunchAgent, None))
+        .plugin(tauri_plugin_updater::Builder::new().build())
         .setup(|app| {
             let handle = app.handle();
             let cfg = load_config(handle);
@@ -337,7 +387,9 @@ pub fn run() {
                 let _ = engine.become_host();
             }
             app.manage(engine.clone());
+            app.manage(Pending::default());
             start_poller(handle.clone(), engine, cfg);
+            start_updater(handle.clone());
             build_popover(handle)?;
             build_main(handle)?;
             TrayIconBuilder::with_id(TRAY)
@@ -381,7 +433,8 @@ pub fn run() {
             set_quiet_wifi,
             set_mute_speakers,
             set_device,
-            set_reconnect
+            set_reconnect,
+            install_update
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");

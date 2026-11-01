@@ -143,8 +143,9 @@
   {/if}
 
   <footer>
-    <button class="btn quiet quality" onclick={() => actions.openWindow('advanced')}>{QUALITY[app.quality].label} · {QUALITY[app.quality].detail.split(',')[0]}<ChevronRight size={12} strokeWidth={1.75} /></button>
+    <button class="btn quiet quality" onclick={() => actions.openWindow('advanced')}>{QUALITY[app.quality].label}{#if !app.update} · {QUALITY[app.quality].detail.split(',')[0]}{/if}<ChevronRight size={12} strokeWidth={1.75} /></button>
     <span class="spacer"></span>
+    {#if app.update}<button class="btn primary" onclick={actions.installUpdate} title="Install Aonin {app.update} and restart">Update</button>{/if}
     <button class="btn quiet" onclick={() => actions.openWindow('devices')}>Open Aonin</button>
     <button class="icon" onclick={actions.quit} aria-label="Quit Aonin"><Power size={14} strokeWidth={1.75} /></button>
   </footer>

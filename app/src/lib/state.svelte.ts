@@ -68,6 +68,9 @@ export interface AppState {
   options: { reconnect: boolean; startAtLogin: boolean; quietWifi: boolean; muteSpeakers: boolean };
   /** Hosting or discovery failed to start. */
   error?: string | null;
+  /** This build's version, and a newer one downloaded and ready to install. */
+  version: string;
+  update: string | null;
 }
 
 export const QUALITY: Record<Quality, { label: string; detail: string; rate: string }> = {
@@ -98,6 +101,8 @@ const base: AppState = {
     defaultMic: 'USB Microphone',
   },
   options: { reconnect: true, startAtLogin: true, quietWifi: false, muteSpeakers: true },
+  version: '0.1.1',
+  update: null,
 };
 
 const clients: ClientRow[] = [
@@ -120,6 +125,7 @@ export const DEMOS: Record<string, Partial<AppState>> = {
   },
   waiting: { hosting: { output: 'USB DAC', clients: [] } },
   client: {
+    update: '0.1.2',
     me: { name: 'Office MacBook', os: 'macos' },
     link: { host: pcStudio, status: 'connected', latencyMs: 24.1, send: { system: true, mic: false }, hear: { system: false, mic: true }, sendLevel: 0.55 },
     hosts: [pcStudio, { id: 'h3', name: 'Living Room PC', os: 'windows', clients: 0 }],

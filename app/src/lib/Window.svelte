@@ -1,5 +1,5 @@
 <script lang="ts">
-  import { AudioLines, Headphones, LogIn, Mic, Monitor, MonitorSmartphone, Network, Power, RefreshCw, SlidersHorizontal, Upload, VolumeX, Wifi } from '@lucide/svelte';
+  import { AudioLines, Download, Headphones, LogIn, Mic, Monitor, MonitorSmartphone, Network, Power, RefreshCw, SlidersHorizontal, Upload, VolumeX, Wifi } from '@lucide/svelte';
   import ClientRow from './ClientRow.svelte';
   import StatusMark from './StatusMark.svelte';
   import Switch from './Switch.svelte';
@@ -202,6 +202,15 @@
         <div class="titlebar"><h2>Startup</h2></div>
         <Switch icon={RefreshCw} label="Reconnect automatically" hint="Join the last host as soon as Aonin opens" checked={app.options.reconnect} onchange={(on) => actions.setReconnect(on)} />
         <Switch icon={LogIn} label="Open at login" hint="Start Aonin in the background when you sign in" checked={app.options.startAtLogin} onchange={(on) => actions.setStartAtLogin(on)} />
+        <div class="titlebar"><h2>Updates</h2></div>
+        <div class="update">
+          <span class="icon" aria-hidden="true"><Download size={16} strokeWidth={1.75} /></span>
+          <span class="text">
+            <span>{app.update ? `Aonin ${app.update} is ready` : `Aonin ${app.version}`}</span>
+            <span class="label">{app.update ? 'Restarting takes a few seconds. Streams pick up again after.' : 'Checks for updates automatically and downloads them in the background.'}</span>
+          </span>
+          {#if app.update}<button class="btn primary" onclick={actions.installUpdate}>Restart to update</button>{/if}
+        </div>
       {/if}
     </main>
   </div>
@@ -250,6 +259,9 @@
   .linkhead { display: flex; align-items: center; gap: 12px; min-height: 52px; border-bottom: 1px solid var(--line); }
   .linkhead .name { font-weight: 700; flex: 1; }
   .grid2 { display: grid; grid-template-columns: 1fr 1fr; column-gap: 36px; align-items: start; }
+  .update { display: flex; align-items: center; gap: 12px; min-height: 52px; border-bottom: 1px solid var(--line); }
+  .update .icon { display: grid; place-items: center; width: 28px; height: 28px; border-radius: 7px; background: var(--recess); color: var(--ink-2); flex: none; }
+  .update .text { flex: 1; display: flex; flex-direction: column; gap: 1px; min-width: 0; }
   .group h3 { display: flex; align-items: center; gap: 6px; font-weight: 400; margin: 14px 0 0; padding-bottom: 6px; border-bottom: 1px solid var(--line); }
   .solo { display: flex; flex-direction: column; align-items: flex-start; gap: 14px; padding: 18px 0; }
   .solo p { font-weight: 600; }

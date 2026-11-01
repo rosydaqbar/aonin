@@ -1,7 +1,7 @@
 {
   "$schema": "https://schema.tauri.app/config/2",
   "productName": "Aonin",
-  "version": "0.1.0",
+  "version": "0.1.1",
   "identifier": "io.github.rosydaqbar.aonin",
   "build": {
     "beforeDevCommand": "npm run dev",
@@ -41,6 +41,18 @@
         "installMode": "both",
         "installerHooks": "windows-hooks.nsh",
         "installerIcon": "icons/icon.ico"
+      }
+    },
+    "createUpdaterArtifacts": true
+  },
+  "plugins": {
+    "updater": {
+      "pubkey": "dW50cnVzdGVkIGNvbW1lbnQ6IG1pbmlzaWduIHB1YmxpYyBrZXk6IEU4NkQ2NDYzMkRDMEExMTUKUldRVm9jQXRZMlJ0NkpzM3JTbkF2am5TREFqSm95UWJSR3ZJNDFRUm44MFdWenRNRllvWWVOV2cK",
+      "endpoints": [
+        "https://github.com/rosydaqbar/aonin/releases/latest/download/latest.json"
+      ],
+      "windows": {
+        "installMode": "passive"
       }
     }
   }
