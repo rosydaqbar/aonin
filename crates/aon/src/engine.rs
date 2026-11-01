@@ -397,7 +397,7 @@ impl Engine {
                 net::run_hub(port, open, follow, &s, false)
             };
             if let Err(err) = run() {
-                *e.lock().unwrap() = Some(format!("Couldn't start hosting: {err}"));
+                *e.lock().unwrap() = Some(format!("Couldn't become the listener: {err}"));
             }
         })?;
         Ok(HostRun { shared, thread, error, output, returns: HashMap::new() })
@@ -463,9 +463,9 @@ impl Engine {
     }
 
     pub fn connect(&self, host: u64) -> Result<()> {
-        let peer = self.disco.peers.lock().unwrap().get(&host).cloned().ok_or_else(|| anyhow!("That host is no longer on the network."))?;
+        let peer = self.disco.peers.lock().unwrap().get(&host).cloned().ok_or_else(|| anyhow!("That listener is no longer on the network."))?;
         if !peer.advert.hosting {
-            return Err(anyhow!("{} stopped hosting.", peer.advert.name));
+            return Err(anyhow!("{} stopped listening.", peer.advert.name));
         }
         if self.my_sources().contains(&host) {
             return Err(anyhow!("{} already sends its audio to this device.", peer.advert.name));

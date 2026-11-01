@@ -1,7 +1,8 @@
 <script lang="ts">
   import Issues from './Issues.svelte';
-  import { ChevronDown, ChevronRight, Mic, MicOff, Monitor, Power } from '@lucide/svelte';
+  import { ChevronDown, ChevronRight, Globe, Info, Lock, Mic, MicOff, Monitor, Power } from '@lucide/svelte';
   import ClientRow from './ClientRow.svelte';
+  import ComingSoon from './ComingSoon.svelte';
   import Grille from './Grille.svelte';
   import StatusMark from './StatusMark.svelte';
   import { app, fmtMs, QUALITY, roleLine } from './state.svelte';
@@ -14,6 +15,7 @@
     : 'var(--strip-ink-2)'
   );
   let idle = $derived(!app.hosting && !app.link);
+  let soon = $state(false);
 
   // Send/Hear stay folded away until asked for; the choice is remembered here.
   let showStreams = $state(readShow());
@@ -34,8 +36,8 @@
     const l = app.link;
     if (!l) return '';
     const send = [l.send.system && 'System audio', l.send.mic ? 'Mic on' : 'Mic off'].filter(Boolean).join(' · ');
-    const hear = [l.hear.system && 'host audio', l.hear.mic && 'host mic'].filter(Boolean).join(' + ');
-    return hear ? `${send} · Hearing ${hear}` : send;
+    const hear = [l.hear.system && 'audio', l.hear.mic && 'mic'].filter(Boolean).join(' and ');
+    return hear ? `${send} · Hearing their ${hear}` : send;
   });
 </script>
 
@@ -44,9 +46,21 @@
     <span class="me" title={app.me.name}>{app.me.name}</span>
     <span class="role"><i style:background={dot}></i>{roleLine(app)}</span>
     {#if app.hosting}
-      <button class="stop" onclick={actions.stopHosting}>{app.link ? 'Stop hosting' : 'Stop'}</button>
+      <button class="stop" onclick={actions.stopHosting}>{app.link ? 'Stop listening' : 'Stop'}</button>
     {/if}
   </header>
+
+  {#if app.hosting}
+    <div class="vis">
+      <Globe size={14} strokeWidth={1.75} aria-hidden="true" />
+      <span>Visible to public</span>
+      <span class="tip">
+        <button class="info" aria-label="What visible to public means" aria-describedby="vis-tip"><Info size={13} strokeWidth={1.75} /></button>
+        <span class="bubble" role="tooltip" id="vis-tip">Any device on this network can find {app.me.name} and send its audio here. No code or approval needed.</span>
+      </span>
+      <button class="btn quiet make" onclick={() => (soon = true)}><Lock size={13} strokeWidth={1.75} />Make private</button>
+    </div>
+  {/if}
 
   {#if app.error}
     <p class="alert" role="alert">{app.error}</p>
@@ -63,8 +77,8 @@
 
   {#if idle && app.hosts.length === 0}
     <section class="solo">
-      <p>No host on this network yet.</p>
-      <button class="btn primary" onclick={actions.becomeHost}>Become host</button>
+      <p>No listener on this network yet.</p>
+      <button class="btn primary" onclick={actions.becomeHost}>Become listener</button>
     </section>
   {/if}
 
@@ -94,8 +108,8 @@
         </span>
         <span class="label">Hear</span>
         <span class="set">
-          <button class="chip" aria-pressed={app.link.hear.system} onclick={() => actions.setHear('system', !app.link!.hear.system)}><Monitor size={13} strokeWidth={1.75} />Host audio</button>
-          <button class="chip" aria-pressed={app.link.hear.mic} onclick={() => actions.setHear('mic', !app.link!.hear.mic)}><Mic size={13} strokeWidth={1.75} />Host mic</button>
+          <button class="chip" aria-pressed={app.link.hear.system} onclick={() => actions.setHear('system', !app.link!.hear.system)}><Monitor size={13} strokeWidth={1.75} />System audio</button>
+          <button class="chip" aria-pressed={app.link.hear.mic} onclick={() => actions.setHear('mic', !app.link!.hear.mic)}><Mic size={13} strokeWidth={1.75} />Mic</button>
         </span>
       </div>
       {/if}
@@ -105,33 +119,33 @@
   {#if app.hosting}
     <section class="block">
       <div class="head">
-        <span class="label">Clients</span>
+        <span class="label">Audio senders</span>
         <span class="label" title="Output">{app.outputLost ? 'No output' : `To ${app.hosting.output}`}</span>
       </div>
       {#each app.hosting.clients as row (row.id)}
         <ClientRow {row} lost={app.outputLost} />
       {:else}
-        <p class="wait">Waiting for clients. Open Aonin on another device on this network.</p>
+        <p class="wait">Waiting for audio senders. Open Aonin on another device on this network.</p>
       {/each}
     </section>
   {/if}
 
   {#if idle && app.hosts.length > 0}
     <section class="block">
-      <div class="head"><span class="label">Hosts on this network</span></div>
+      <div class="head"><span class="label">Listeners on this network</span></div>
       {#each app.hosts as h (h.id)}
         <div class="hostrow" class:blocked={h.blocked}>
           <StatusMark mark={h.blocked ? 'error' : 'live'} />
           <div class="who">
             <span class="name">{h.name}</span>
-            <span class="label">{h.blocked ?? `${h.clients} ${h.clients === 1 ? 'client' : 'clients'}`}</span>
+            <span class="label">{h.blocked ?? `${h.clients} ${h.clients === 1 ? 'audio sender' : 'audio senders'}`}</span>
           </div>
           {#if !h.blocked}
             <button class="btn" onclick={() => actions.connect(h.id)}>Connect</button>
           {/if}
         </div>
       {/each}
-      <button class="btn quiet also" onclick={actions.becomeHost}>Or become host instead</button>
+      <button class="btn quiet also" onclick={actions.becomeHost}>Or become the listener instead</button>
     </section>
   {/if}
 
@@ -143,6 +157,8 @@
     <button class="icon" onclick={actions.quit} aria-label="Quit Aonin"><Power size={14} strokeWidth={1.75} /></button>
   </footer>
 </div>
+
+<ComingSoon bind:open={soon} />
 
 <style>
   .pop {
@@ -188,6 +204,42 @@
     letter-spacing: 0.04em;
   }
   .stop:hover { background: var(--strip-ink); color: var(--strip); }
+  .vis {
+    display: flex;
+    align-items: center;
+    gap: 7px;
+    min-height: 38px;
+    padding: 0 6px 0 16px;
+    border-bottom: 1px solid var(--line);
+    font-size: var(--size-s);
+    color: var(--ink-2);
+  }
+  .vis > :global(svg) { color: var(--ink-2); flex: none; }
+  .vis > span:not(.tip) { color: var(--ink); font-weight: 600; }
+  .tip { position: relative; display: inline-grid; }
+  .info { display: grid; place-items: center; width: 22px; height: 22px; padding: 0; border: 0; border-radius: 50%; background: transparent; color: var(--ink-2); }
+  .info:hover, .info:focus-visible { color: var(--ink); background: var(--recess); }
+  .bubble {
+    position: absolute;
+    top: calc(100% + 6px);
+    left: -60px;
+    z-index: 10;
+    width: 236px;
+    padding: 8px 10px;
+    border-radius: 8px;
+    background: var(--strip);
+    color: var(--strip-ink);
+    font-size: var(--size-s);
+    line-height: 1.45;
+    box-shadow: 0 6px 18px rgb(0 0 0 / 0.18);
+    opacity: 0;
+    visibility: hidden;
+    transition: opacity 120ms ease;
+    pointer-events: none;
+  }
+  .tip:hover .bubble, .info:focus-visible + .bubble { opacity: 1; visibility: visible; }
+  @media (prefers-reduced-motion: reduce) { .bubble { transition: none; } }
+  .make { margin-left: auto; display: inline-flex; align-items: center; gap: 6px; }
   .alert { margin: 12px 16px 0; padding: 9px 12px; border-radius: 8px; background: var(--red-wash); color: var(--ink); }
   .alert.lost { display: flex; flex-direction: column; align-items: flex-start; gap: 8px; }
   .quality { color: var(--ink-2); }

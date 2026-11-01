@@ -1,6 +1,7 @@
 <script lang="ts">
-  import { AudioLines, Download, Info, LogIn, Mic, Monitor, MonitorSmartphone, Network, Power, RefreshCw, SlidersHorizontal, VolumeX, Wifi } from '@lucide/svelte';
+  import { AudioLines, Download, Globe, Info, Lock, LogIn, Mic, Monitor, MonitorSmartphone, Network, Power, RefreshCw, SlidersHorizontal, VolumeX, Wifi } from '@lucide/svelte';
   import ClientRow from './ClientRow.svelte';
+  import ComingSoon from './ComingSoon.svelte';
   import Issues from './Issues.svelte';
   import StatusMark from './StatusMark.svelte';
   import Switch from './Switch.svelte';
@@ -22,6 +23,7 @@
     }
   }
   let section = $state<Section>(readHash());
+  let soon = $state(false);
 
   function readHash(): Section {
     const h = (typeof location === 'undefined' ? '' : location.hash.slice(1)) as Section;
@@ -40,6 +42,17 @@
     <span class="me">{app.me.name} · {app.me.os === 'macos' ? 'macOS' : 'Windows'}</span>
     <span class="role"><i style:background={dot}></i>{roleLine(app)}</span>
   </header>
+
+  {#if app.hosting}
+    <div class="vis">
+      <span class="icon" aria-hidden="true"><Globe size={16} strokeWidth={1.75} /></span>
+      <span class="text">
+        <span class="title">Visible to public</span>
+        <span class="label">Any device on this network can find {app.me.name} and send its audio here. No code or approval needed.</span>
+      </span>
+      <button class="btn" onclick={() => (soon = true)}><Lock size={14} strokeWidth={1.75} />Make private</button>
+    </div>
+  {/if}
 
   <div class="body">
     <nav aria-label="Sections">
@@ -62,22 +75,22 @@
       {#if section === 'devices'}
         {#if app.hosting}
           <div class="titlebar">
-            <h2>Clients</h2>
+            <h2>Audio senders</h2>
             <span class="label">Playing to {app.hosting.output}</span>
-            <button class="btn" onclick={actions.stopHosting}>Stop hosting</button>
+            <button class="btn" onclick={actions.stopHosting}>Stop listening</button>
           </div>
           {#if app.hosting.clients.length}
             <div class="cols label"><span></span><span>Device</span><span>Level</span><span class="r">Latency</span><span>Volume</span><span></span></div>
             {#each app.hosting.clients as row (row.id)}<ClientRow {row} wide lost={app.outputLost} />{/each}
           {:else}
-            <p class="empty">Waiting for clients. Open Aonin on another device on this network and it will appear here.</p>
+            <p class="empty">Waiting for audio senders. Open Aonin on another device on this network and it will appear here.</p>
           {/if}
         {/if}
 
         {#if app.link}
           <div class="titlebar">
             <h2>Connection</h2>
-            {#if !app.hosting}<button class="btn" onclick={actions.becomeHost}>Become host</button>{/if}
+            {#if !app.hosting}<button class="btn" onclick={actions.becomeHost}>Become listener</button>{/if}
           </div>
           <div class="panel">
             <div class="linkhead">
@@ -97,8 +110,8 @@
             icon={VolumeX}
             label="Mute speakers while sending"
             hint={app.me.os === 'macos'
-              ? 'This Mac stays quiet while its audio plays on the host. What Aonin plays still comes through.'
-              : 'This PC stays quiet while its audio plays on the host, including what Aonin plays.'}
+              ? 'This Mac stays quiet while its audio plays on the listener. What Aonin plays still comes through.'
+              : 'This PC stays quiet while its audio plays on the listener, including what Aonin plays.'}
             checked={app.options.muteSpeakers}
             disabled={!app.link.send.system}
             onchange={(on) => actions.setMuteSpeakers(on)}
@@ -109,31 +122,31 @@
             <h2>Hear from {app.link.host.name}</h2>
             <span class="label">From {app.link.host.name}, played on this {app.me.os === 'macos' ? 'Mac' : 'PC'}</span>
           </div>
-          <Switch icon={Monitor} label="Host audio" hint="What {app.link.host.name}'s apps play, without the mix" checked={app.link.hear.system} onchange={(on) => actions.setHear('system', on)} />
-          <Switch icon={Mic} label="Host mic" hint="{app.link.host.name}'s microphone" checked={app.link.hear.mic} onchange={(on) => actions.setHear('mic', on)} />
+          <Switch icon={Monitor} label="System audio" hint="What {app.link.host.name}'s apps play, without the mix" checked={app.link.hear.system} onchange={(on) => actions.setHear('system', on)} />
+          <Switch icon={Mic} label="Microphone" hint="{app.link.host.name}'s microphone" checked={app.link.hear.mic} onchange={(on) => actions.setHear('mic', on)} />
         {/if}
 
         {#if !app.hosting && !app.link}
           <div class="titlebar">
-            <h2>Hosts on this network</h2>
-            {#if app.hosts.length}<button class="btn" onclick={actions.becomeHost}>Become host</button>{/if}
+            <h2>Listeners on this network</h2>
+            {#if app.hosts.length}<button class="btn" onclick={actions.becomeHost}>Become listener</button>{/if}
           </div>
           {#if app.hosts.length === 0}
             <div class="solo">
-              <p>No host on this network yet.</p>
-              <button class="btn primary" onclick={actions.becomeHost}>Become host</button>
+              <p>No listener on this network yet.</p>
+              <button class="btn primary" onclick={actions.becomeHost}>Become listener</button>
             </div>
           {/if}
         {/if}
 
         {#if (app.hosting || !app.link) && others.length}
-          {#if app.hosting}<div class="titlebar"><h2>Other hosts</h2></div>{/if}
+          {#if app.hosting}<div class="titlebar"><h2>Other listeners</h2></div>{/if}
           {#each others as h (h.id)}
             <div class="hostrow">
               <StatusMark mark={h.blocked ? 'error' : 'live'} />
               <div class="who">
                 <span class="name">{h.name}</span>
-                <span class="label" class:bad={h.blocked}>{h.blocked ?? `Hosting · ${h.clients} ${h.clients === 1 ? 'client' : 'clients'}`}</span>
+                <span class="label" class:bad={h.blocked}>{h.blocked ?? `Listening · ${h.clients} ${h.clients === 1 ? 'audio sender' : 'audio senders'}`}</span>
               </div>
               {#if !h.blocked}<button class="btn" onclick={() => actions.connect(h.id)}>Connect</button>{/if}
             </div>
@@ -147,13 +160,13 @@
               <option value="">System default ({app.devices.defaultOutput || 'none'})</option>
               {#each app.devices.outputs as d}<option value={d}>{d}</option>{/each}
             </select>
-            <span class="label">Where the mix comes out when this device is host. Follows the system default unless you pick one.</span></label>
+            <span class="label">Where the mix comes out when this device is the listener. Follows the system default unless you pick one.</span></label>
           <label><span>System audio from</span>
             <select value={app.devices.systemSource} onchange={(e) => actions.setDevice('systemSource', e.currentTarget.value)}>
               <option value="">System default ({app.devices.defaultOutput || 'none'})</option>
               {#each app.devices.outputs as d}<option value={d}>{d}</option>{/each}
             </select>
-            <span class="label">The output whose sound is sent to the host.</span></label>
+            <span class="label">The output whose sound is sent to the listener.</span></label>
           <label><span>Microphone</span>
             <select value={app.devices.mic} onchange={(e) => actions.setDevice('mic', e.currentTarget.value)}>
               <option value="">System default ({app.devices.defaultMic || 'none'})</option>
@@ -199,7 +212,7 @@
             <p class="label">Version {app.version}</p>
           </div>
         </div>
-        <p class="overview">Aonin brings the audio of the computers on your local network into one place, in real time and at the highest quality over Wi-Fi. Any computer can host; the others play their audio there and can hear the host back. No account and no server: everything stays on your network.</p>
+        <p class="overview">Aonin brings the audio of the computers on your local network into one place, in real time and at the highest quality over Wi-Fi. Any computer can be the listener; the others send their audio to it and can hear the listener back. No account and no server: everything stays on your network.</p>
 
         <div class="titlebar"><h2>Updates</h2></div>
         <div class="update">
@@ -249,15 +262,23 @@
           {/each}
         </div>
         <div class="titlebar"><h2>Startup</h2></div>
-        <Switch icon={RefreshCw} label="Reconnect automatically" hint="Join the last host as soon as Aonin opens" checked={app.options.reconnect} onchange={(on) => actions.setReconnect(on)} />
+        <Switch icon={RefreshCw} label="Reconnect automatically" hint="Send to the last listener as soon as Aonin opens" checked={app.options.reconnect} onchange={(on) => actions.setReconnect(on)} />
         <Switch icon={LogIn} label="Open at login" hint="Start Aonin in the background when you sign in" checked={app.options.startAtLogin} onchange={(on) => actions.setStartAtLogin(on)} />
       {/if}
     </main>
   </div>
 </div>
 
+<ComingSoon bind:open={soon} />
+
 <style>
-  .win { height: 100vh; display: grid; grid-template-rows: 52px 1fr; background: var(--housing); }
+  .win { height: 100vh; display: grid; grid-template-rows: 52px auto 1fr; background: var(--housing); }
+  .win > .body:nth-child(2) { grid-row: 2 / 4; }
+  .vis { display: flex; align-items: center; gap: 12px; padding: 10px 20px; border-bottom: 1px solid var(--line); background: var(--recess); }
+  .vis .icon { display: grid; place-items: center; width: 28px; height: 28px; border-radius: 7px; background: var(--raised); color: var(--ink-2); flex: none; }
+  .vis .text { flex: 1; display: flex; flex-direction: column; gap: 1px; min-width: 0; }
+  .vis .title { font-weight: 700; }
+  .vis .btn { display: inline-flex; align-items: center; gap: 6px; flex: none; }
   .strip { background: var(--strip); color: var(--strip-ink); display: flex; align-items: center; gap: 14px; padding: 0 20px; }
   .brand { font-weight: 700; font-size: var(--size); letter-spacing: 0.02em; }
   .me { font-size: var(--size-s); letter-spacing: 0.04em; color: var(--strip-ink-2); }

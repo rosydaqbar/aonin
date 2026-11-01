@@ -137,7 +137,7 @@ fn err(e: impl std::fmt::Display) -> String {
 }
 
 fn parse_host(id: &str) -> Result<u64, String> {
-    engine::parse_id(id).ok_or_else(|| "unknown host".to_string())
+    engine::parse_id(id).ok_or_else(|| "unknown listener".to_string())
 }
 
 #[tauri::command(async)]

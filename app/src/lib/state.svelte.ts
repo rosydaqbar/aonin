@@ -194,10 +194,10 @@ export async function followBackend() {
 export function roleLine(s: AppState): string {
   if (s.issues.length) return 'Needs permission';
   if (s.hosting && s.outputLost) return 'Output lost';
-  if (s.hosting && s.link) return 'Hosting · also connected';
+  if (s.hosting && s.link) return 'Listening · also sending';
   if (s.hosting) {
     const n = s.hosting.clients.length;
-    return n === 0 ? 'Hosting · no clients yet' : `Hosting · ${n} ${n === 1 ? 'client' : 'clients'}`;
+    return n === 0 ? 'Listening · no audio senders yet' : `Listening · ${n} ${n === 1 ? 'audio sender' : 'audio senders'}`;
   }
   if (s.link) return s.link.status === 'connected' ? 'Connected' : 'Reconnecting…';
   return 'Not connected';
