@@ -48,7 +48,7 @@
       <span class="icon" aria-hidden="true"><Globe size={16} strokeWidth={1.75} /></span>
       <span class="text">
         <span class="title">Visible to public</span>
-        <span class="label">Any device on this network can find {app.me.name} and send its audio here. No code or approval needed.</span>
+        <span class="label">Anyone on this network can join.</span>
       </span>
       <button class="btn" onclick={() => (soon = true)}><Lock size={14} strokeWidth={1.75} />Make private</button>
     </div>

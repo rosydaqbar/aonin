@@ -2,7 +2,6 @@
   import Issues from './Issues.svelte';
   import { ChevronDown, ChevronRight, Globe, Info, Lock, Mic, MicOff, Monitor, Power } from '@lucide/svelte';
   import ClientRow from './ClientRow.svelte';
-  import ComingSoon from './ComingSoon.svelte';
   import Grille from './Grille.svelte';
   import StatusMark from './StatusMark.svelte';
   import { app, fmtMs, QUALITY, roleLine } from './state.svelte';
@@ -15,7 +14,14 @@
     : 'var(--strip-ink-2)'
   );
   let idle = $derived(!app.hosting && !app.link);
+  // "Make private" isn't built yet: say so inline for a few seconds.
   let soon = $state(false);
+  let soonTimer: ReturnType<typeof setTimeout> | undefined;
+  function showSoon() {
+    soon = true;
+    clearTimeout(soonTimer);
+    soonTimer = setTimeout(() => (soon = false), 4000);
+  }
 
   // Send/Hear stay folded away until asked for; the choice is remembered here.
   let showStreams = $state(readShow());
@@ -56,10 +62,11 @@
       <span>Visible to public</span>
       <span class="tip">
         <button class="info" aria-label="What visible to public means" aria-describedby="vis-tip"><Info size={13} strokeWidth={1.75} /></button>
-        <span class="bubble" role="tooltip" id="vis-tip">Any device on this network can find {app.me.name} and send its audio here. No code or approval needed.</span>
+        <span class="bubble" role="tooltip" id="vis-tip">Anyone on this network can join.</span>
       </span>
-      <button class="btn quiet make" onclick={() => (soon = true)}><Lock size={13} strokeWidth={1.75} />Make private</button>
+      <button class="btn quiet make" onclick={showSoon}><Lock size={13} strokeWidth={1.75} />Make private</button>
     </div>
+    {#if soon}<p class="soon" role="status">Private mode is coming soon.</p>{/if}
   {/if}
 
   {#if app.error}
@@ -158,8 +165,6 @@
   </footer>
 </div>
 
-<ComingSoon bind:open={soon} />
-
 <style>
   .pop {
     width: 360px;
@@ -239,6 +244,7 @@
   }
   .tip:hover .bubble, .info:focus-visible + .bubble { opacity: 1; visibility: visible; }
   @media (prefers-reduced-motion: reduce) { .bubble { transition: none; } }
+  .soon { padding: 8px 16px; border-bottom: 1px solid var(--line); background: var(--recess); font-size: var(--size-s); }
   .make { margin-left: auto; display: inline-flex; align-items: center; gap: 6px; }
   .alert { margin: 12px 16px 0; padding: 9px 12px; border-radius: 8px; background: var(--red-wash); color: var(--ink); }
   .alert.lost { display: flex; flex-direction: column; align-items: flex-start; gap: 8px; }
