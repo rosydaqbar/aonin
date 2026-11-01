@@ -70,7 +70,7 @@ pub struct Prefs {
     pub output: Option<String>,
     pub system_source: Option<String>,
     pub mic: Option<String>,
-    /// What this device sends: Lossless, CD, Balanced or Saver.
+    /// What this device sends: Highest, CD, Balanced or Saver.
     pub quality: Quality,
     /// Shown in the UI; the desktop shell applies them.
     pub start_at_login: bool,
@@ -844,7 +844,7 @@ mod tests {
             output: None,
             system_source: None,
             mic: None,
-            quality: Quality::Lossless,
+            quality: Quality::Highest,
             start_at_login: false,
             quiet_wifi: false,
             mute_speakers: false,

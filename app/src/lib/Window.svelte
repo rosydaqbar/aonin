@@ -181,7 +181,7 @@
           </table>
           <dl class="legend">
             <dt>Repaired</dt><dd>Packets Wi-Fi lost that Aonin got back in time. Nothing was lost.</dd>
-            <dt>Covered gaps</dt><dd>Packets that never arrived, smoothed over. Above zero means a moment was not lossless.</dd>
+            <dt>Covered gaps</dt><dd>Packets that never arrived, smoothed over. Above zero means some audio was filled in.</dd>
             <dt>Dropouts</dt><dd>The buffer ran dry and sound paused. Aonin raises the buffer after each one.</dd>
           </dl>
         {:else}
@@ -199,7 +199,7 @@
             <p class="label">Version {app.version}</p>
           </div>
         </div>
-        <p class="overview">Aonin brings the audio of the computers on your local network into one place, in real time and lossless over Wi-Fi. Any computer can host; the others play their audio there and can hear the host back. No account and no server: everything stays on your network.</p>
+        <p class="overview">Aonin brings the audio of the computers on your local network into one place, in real time and at the highest quality over Wi-Fi. Any computer can host; the others play their audio there and can hear the host back. No account and no server: everything stays on your network.</p>
 
         <div class="titlebar"><h2>Updates</h2></div>
         <div class="update">

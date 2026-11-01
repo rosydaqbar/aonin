@@ -224,7 +224,7 @@ fn set_quiet_wifi(app: AppHandle, engine: Eng, on: bool) -> Result<(), String> {
     Ok(())
 }
 
-/// Lossless, CD, Balanced or Saver for what this device sends.
+/// Highest, CD, Balanced or Saver for what this device sends.
 #[tauri::command(async)]
 fn set_quality(app: AppHandle, engine: Eng, quality: String) -> Result<(), String> {
     let q = aon_core::protocol::Quality::from_name(&quality).ok_or("unknown quality")?;

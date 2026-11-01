@@ -30,7 +30,7 @@
       "icons/icon.icns",
       "icons/icon.ico"
     ],
-    "shortDescription": "Lossless real-time audio over the local network",
+    "shortDescription": "Highest-quality real-time audio over the local network",
     "category": "Utility",
     "macOS": {
       "minimumSystemVersion": "14.2",

@@ -82,7 +82,7 @@ export const actions = {
   async installUpdate() {
     await call('install_update');
   },
-  async setQuality(quality: 'lossless' | 'cd' | 'balanced' | 'saver') {
+  async setQuality(quality: 'highest' | 'cd' | 'balanced' | 'saver') {
     if (!(await call('set_quality', { quality }))) app.quality = quality;
   },
   async setDevice(role: 'output' | 'systemSource' | 'mic', name: string) {

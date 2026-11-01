@@ -3,7 +3,7 @@
 // a demo scenario is loaded from `?demo=<name>`.
 
 export type Os = 'windows' | 'macos';
-export type Quality = 'lossless' | 'cd' | 'balanced' | 'saver';
+export type Quality = 'highest' | 'cd' | 'balanced' | 'saver';
 
 /** One fixed mark per state, always drawn in the same cell of a row. */
 export type Mark = 'live' | 'muted' | 'connecting' | 'degraded' | 'error';
@@ -77,7 +77,7 @@ export interface AppState {
 }
 
 export const QUALITY: Record<Quality, { label: string; detail: string; rate: string }> = {
-  lossless: { label: 'Lossless', detail: '24-bit · 48 kHz, identical to the source', rate: '2.3 Mbps per stream' },
+  highest: { label: 'Highest', detail: '24-bit · 48 kHz, uncompressed', rate: '2.3 Mbps per stream' },
   cd: { label: 'CD', detail: '16-bit · 48 kHz, CD quality', rate: '1.5 Mbps per stream' },
   balanced: { label: 'Balanced', detail: 'Opus, for busy Wi-Fi · adds about 12 ms', rate: '256 kbps per stream' },
   saver: { label: 'Saver', detail: 'Opus, for weak Wi-Fi · adds about 12 ms', rate: '96 kbps per stream' },
@@ -91,7 +91,7 @@ const base: AppState = {
   hosting: null,
   link: null,
   hosts: [],
-  quality: 'lossless',
+  quality: 'highest',
   outputLost: false,
   stats: [],
   devices: {

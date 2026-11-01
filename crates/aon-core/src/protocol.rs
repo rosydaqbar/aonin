@@ -47,9 +47,9 @@ pub const OPUS_FRAME_FRAMES: usize = OPUS_FRAME_BLOCKS * BLOCK_FRAMES;
 /// What a sender puts on the wire, picked by the user per device.
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Default)]
 pub enum Quality {
-    /// 24-bit PCM: bit-exact for any 24-bit source.
+    /// 24-bit PCM, uncompressed.
     #[default]
-    Lossless,
+    Highest,
     /// 16-bit PCM.
     Cd,
     /// Opus at about 256 kbps.
@@ -61,7 +61,7 @@ pub enum Quality {
 impl Quality {
     pub fn codec(self) -> Codec {
         match self {
-            Quality::Lossless => Codec::Pcm24,
+            Quality::Highest => Codec::Pcm24,
             Quality::Cd => Codec::Pcm16,
             Quality::Balanced | Quality::Saver => Codec::Opus,
         }
@@ -78,7 +78,7 @@ impl Quality {
 
     pub fn name(self) -> &'static str {
         match self {
-            Quality::Lossless => "lossless",
+            Quality::Highest => "highest",
             Quality::Cd => "cd",
             Quality::Balanced => "balanced",
             Quality::Saver => "saver",
@@ -87,7 +87,8 @@ impl Quality {
 
     pub fn from_name(s: &str) -> Option<Self> {
         Some(match s {
-            "lossless" => Quality::Lossless,
+            // "lossless" is what 0.1.x saved.
+            "highest" | "lossless" => Quality::Highest,
             "cd" => Quality::Cd,
             "balanced" => Quality::Balanced,
             "saver" => Quality::Saver,
@@ -364,7 +365,7 @@ mod tests {
             decode(&buf),
             Some(Packet::Opus { stream: 1, seq: 10, frames: vec![vec![1, 2, 3], vec![9, 8]], retransmit: true })
         );
-        for q in [Quality::Lossless, Quality::Cd, Quality::Balanced, Quality::Saver] {
+        for q in [Quality::Highest, Quality::Cd, Quality::Balanced, Quality::Saver] {
             assert_eq!(Quality::from_name(q.name()), Some(q));
         }
     }

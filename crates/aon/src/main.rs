@@ -6,7 +6,7 @@ use clap::{Parser, Subcommand};
 use std::net::{SocketAddr, ToSocketAddrs};
 
 #[derive(Parser)]
-#[command(name = "aon", about = "Lossless real-time audio over the local network")]
+#[command(name = "aon", about = "Highest-quality real-time audio over the local network")]
 struct Cli {
     #[command(subcommand)]
     cmd: Cmd,
@@ -85,8 +85,8 @@ enum Cmd {
         /// Testing: randomly drop this percentage of packets to simulate bad Wi-Fi.
         #[arg(long, default_value_t = 0, hide = true)]
         drop_percent: u32,
-        /// lossless, cd, balanced or saver.
-        #[arg(long, default_value = "lossless")]
+        /// highest, cd, balanced or saver.
+        #[arg(long, default_value = "highest")]
         quality: String,
         /// Testing: play a quiet tone from this same process on this output
         /// device. System capture should leave it out.
@@ -177,7 +177,7 @@ fn main() -> Result<()> {
                 audio::Source::System => aon_core::protocol::Source::System,
                 audio::Source::Mic => aon_core::protocol::Source::Mic,
             };
-            let quality = aon_core::protocol::Quality::from_name(&quality).ok_or_else(|| anyhow::anyhow!("quality must be lossless, cd, balanced or saver"))?;
+            let quality = aon_core::protocol::Quality::from_name(&quality).ok_or_else(|| anyhow::anyhow!("quality must be highest, cd, balanced or saver"))?;
             let cfg = net::SendConfig { hub, who, source: kind, quality, drop_percent, verbose: true };
             net::run_sender(cfg, rx, rate, &net::SendShared::default())
         }

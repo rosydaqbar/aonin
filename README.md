@@ -5,7 +5,7 @@ Hear every computer on your desk through one pair of headphones.
 Aonin joins the audio of computers on the same local network into one output. One machine becomes the **host**; the others connect as **clients** and stream their system audio and/or microphone to it, and the host mixes everything and plays it on one device. It runs on **Windows and macOS** from the tray / menu bar.
 
 - **Pure local network.** No servers, no accounts. Devices find each other on the LAN and nothing leaves it.
-- **Lossless by default.** Uncompressed 24-bit / 48 kHz PCM, with lighter tiers (CD 16-bit, and Opus Balanced / Saver) for weak networks.
+- **Highest quality by default.** Uncompressed 24-bit / 48 kHz PCM, with lighter tiers (CD 16-bit, and Opus Balanced / Saver) for weak networks.
 - **Real time over Wi-Fi.** Typically 15–30 ms of buffering, with redundant packets and retransmits so Wi-Fi packet loss doesn't become dropouts.
 - **No drivers.** System audio is captured with WASAPI loopback on Windows and the Core Audio process tap on macOS 14.2+.
 
@@ -80,11 +80,11 @@ Run the tests with `cargo test`.
 
 ## Roadmap
 
-- [x] Lossless streaming with redundancy, retransmit and an adaptive jitter buffer
+- [x] Highest-quality streaming with redundancy, retransmit and an adaptive jitter buffer
 - [x] System audio and mic capture on Windows and macOS, no drivers
 - [x] LAN discovery, host/client roles, loop detection, auto-reconnect
 - [x] Tray / menu bar app with per-device volume, mute and live meters
-- [x] Quality tiers: Lossless, CD (16-bit), Balanced and Saver (Opus)
+- [x] Quality tiers: Highest, CD (16-bit), Balanced and Saver (Opus)
 - [x] Two-way audio: hear the host's audio and mic on a client
 - [x] Never records Aonin's own playback (no echo, no loops)
 - [x] Pick audio devices; recover automatically when the output is unplugged or changes
