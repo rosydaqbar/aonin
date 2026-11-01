@@ -1,5 +1,5 @@
 <script lang="ts">
-  import { Power } from '@lucide/svelte';
+  import { AudioLines, Headphones, LogIn, Mic, Monitor, MonitorSmartphone, Network, Power, RefreshCw, SlidersHorizontal, Upload, VolumeX, Wifi } from '@lucide/svelte';
   import ClientRow from './ClientRow.svelte';
   import StatusMark from './StatusMark.svelte';
   import Switch from './Switch.svelte';
@@ -7,6 +7,7 @@
   import { app, fmtMs, QUALITY, roleLine, type Quality } from './state.svelte';
 
   const sections: Section[] = ['devices', 'audio', 'network', 'advanced'];
+  const sectionIcons = { devices: MonitorSmartphone, audio: AudioLines, network: Network, advanced: SlidersHorizontal };
   let section = $state<Section>(readHash());
 
   function readHash(): Section {
@@ -30,7 +31,8 @@
   <div class="body">
     <nav aria-label="Sections">
       {#each sections as s}
-        <a href="#{s}" aria-current={section === s ? 'page' : undefined}>{s[0].toUpperCase() + s.slice(1)}</a>
+        {@const Icon = sectionIcons[s]}
+        <a href="#{s}" aria-current={section === s ? 'page' : undefined}><Icon size={15} strokeWidth={1.75} aria-hidden="true" />{s[0].toUpperCase() + s.slice(1)}</a>
       {/each}
       <button class="quit" onclick={actions.quit}><Power size={14} strokeWidth={1.75} />Quit Aonin</button>
     </nav>
@@ -83,9 +85,10 @@
             </div>
             <div class="grid2">
               <div class="group" role="group" aria-labelledby="send-head">
-                <h3 class="label" id="send-head">Send to {app.link.host.name}</h3>
-                <Switch label="System audio" hint="Everything this device plays" checked={app.link.send.system} onchange={(on) => actions.setSend('system', on)} />
+                <h3 class="label" id="send-head"><Upload size={13} strokeWidth={1.75} aria-hidden="true" />Send to {app.link.host.name}</h3>
+                <Switch icon={Monitor} label="System audio" hint="Everything this device plays" checked={app.link.send.system} onchange={(on) => actions.setSend('system', on)} />
                 <Switch
+                  icon={VolumeX}
                   label="Mute speakers while sending"
                   hint={app.me.os === 'macos'
                     ? 'This Mac stays quiet while its audio plays on the host. What Aonin plays still comes through.'
@@ -94,12 +97,12 @@
                   disabled={!app.link.send.system}
                   onchange={(on) => actions.setMuteSpeakers(on)}
                 />
-                <Switch label="Microphone" hint={app.devices.mic || app.devices.defaultMic} checked={app.link.send.mic} onchange={(on) => actions.setSend('mic', on)} />
+                <Switch icon={Mic} label="Microphone" hint={app.devices.mic || app.devices.defaultMic} checked={app.link.send.mic} onchange={(on) => actions.setSend('mic', on)} />
               </div>
               <div class="group" role="group" aria-labelledby="hear-head">
-                <h3 class="label" id="hear-head">Hear from {app.link.host.name}</h3>
-                <Switch label="Host audio" hint="What {app.link.host.name}'s apps play, without the mix" checked={app.link.hear.system} onchange={(on) => actions.setHear('system', on)} />
-                <Switch label="Host mic" hint="{app.link.host.name}'s microphone, played here" checked={app.link.hear.mic} onchange={(on) => actions.setHear('mic', on)} />
+                <h3 class="label" id="hear-head"><Headphones size={13} strokeWidth={1.75} aria-hidden="true" />Hear from {app.link.host.name}</h3>
+                <Switch icon={Monitor} label="Host audio" hint="What {app.link.host.name}'s apps play, without the mix" checked={app.link.hear.system} onchange={(on) => actions.setHear('system', on)} />
+                <Switch icon={Mic} label="Host mic" hint="{app.link.host.name}'s microphone, played here" checked={app.link.hear.mic} onchange={(on) => actions.setHear('mic', on)} />
               </div>
             </div>
           </div>
@@ -181,7 +184,7 @@
         {/if}
         {#if app.me.os === 'macos'}
           <div class="titlebar"><h2>Wi-Fi</h2></div>
-          <Switch label="Keep Wi-Fi steady" hint="Turns off AirDrop and Handoff scanning, which makes Mac Wi-Fi stall every few seconds. Asks for your password; back on when you switch this off or restart." checked={app.options.quietWifi} onchange={(on) => actions.setQuietWifi(on)} />
+          <Switch icon={Wifi} label="Keep Wi-Fi steady" hint="Turns off AirDrop and Handoff scanning, which makes Mac Wi-Fi stall every few seconds. Asks for your password; back on when you switch this off or restart." checked={app.options.quietWifi} onchange={(on) => actions.setQuietWifi(on)} />
         {/if}
       {:else}
         <div class="titlebar"><h2>Quality</h2><span class="label">For audio this device sends</span></div>
@@ -197,8 +200,8 @@
           {/each}
         </div>
         <div class="titlebar"><h2>Startup</h2></div>
-        <Switch label="Reconnect automatically" hint="Join the last host as soon as Aonin opens" checked={app.options.reconnect} onchange={(on) => actions.setReconnect(on)} />
-        <Switch label="Open at login" hint="Start Aonin in the background when you sign in" checked={app.options.startAtLogin} onchange={(on) => actions.setStartAtLogin(on)} />
+        <Switch icon={RefreshCw} label="Reconnect automatically" hint="Join the last host as soon as Aonin opens" checked={app.options.reconnect} onchange={(on) => actions.setReconnect(on)} />
+        <Switch icon={LogIn} label="Open at login" hint="Start Aonin in the background when you sign in" checked={app.options.startAtLogin} onchange={(on) => actions.setStartAtLogin(on)} />
       {/if}
     </main>
   </div>
@@ -213,7 +216,9 @@
   .role i { width: 8px; height: 8px; border-radius: 50%; }
   .body { display: grid; grid-template-columns: 172px 1fr; min-height: 0; }
   nav { border-right: 1px solid var(--line); padding: 16px 10px; display: flex; flex-direction: column; gap: 2px; }
-  nav a { padding: 8px 10px; border-radius: 6px; color: var(--ink); text-decoration: none; }
+  nav a { display: flex; align-items: center; gap: 10px; padding: 8px 10px; border-radius: 6px; color: var(--ink); text-decoration: none; }
+  nav a :global(svg) { color: var(--ink-2); flex: none; }
+  nav a[aria-current='page'] :global(svg) { color: var(--ink); }
   nav a:hover { color: var(--ink); background: color-mix(in srgb, var(--recess) 50%, transparent); }
   nav a[aria-current='page'] { background: var(--raised); font-weight: 700; box-shadow: 0 1px 2px rgb(0 0 0 / 0.08); }
   .quit {
@@ -245,7 +250,7 @@
   .linkhead { display: flex; align-items: center; gap: 12px; min-height: 52px; border-bottom: 1px solid var(--line); }
   .linkhead .name { font-weight: 700; flex: 1; }
   .grid2 { display: grid; grid-template-columns: 1fr 1fr; column-gap: 36px; align-items: start; }
-  .group h3 { font-weight: 400; margin: 14px 0 0; padding-bottom: 6px; border-bottom: 1px solid var(--line); }
+  .group h3 { display: flex; align-items: center; gap: 6px; font-weight: 400; margin: 14px 0 0; padding-bottom: 6px; border-bottom: 1px solid var(--line); }
   .solo { display: flex; flex-direction: column; align-items: flex-start; gap: 14px; padding: 18px 0; }
   .solo p { font-weight: 600; }
   .hostrow { display: grid; grid-template-columns: 8px minmax(0, 1fr) auto; gap: 16px; align-items: center; min-height: 52px; border-bottom: 1px solid var(--line); }

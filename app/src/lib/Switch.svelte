@@ -1,8 +1,17 @@
 <script lang="ts">
-  let { checked = $bindable(false), label, hint, disabled = false, onchange }: { checked?: boolean; label: string; hint?: string; disabled?: boolean; onchange?: (checked: boolean) => void } = $props();
+  import type { Component } from 'svelte';
+  let {
+    checked = $bindable(false),
+    label,
+    hint,
+    icon: Icon,
+    disabled = false,
+    onchange,
+  }: { checked?: boolean; label: string; hint?: string; icon?: Component<{ size?: number; strokeWidth?: number }>; disabled?: boolean; onchange?: (checked: boolean) => void } = $props();
 </script>
 
 <label class="switch" class:disabled>
+  {#if Icon}<span class="icon" aria-hidden="true"><Icon size={16} strokeWidth={1.75} /></span>{/if}
   <span class="text">
     <span>{label}</span>
     {#if hint}<span class="label">{hint}</span>{/if}
@@ -19,6 +28,7 @@
     min-height: 52px;
     border-bottom: 1px solid var(--line);
   }
+  .icon { display: grid; place-items: center; width: 28px; height: 28px; border-radius: 7px; background: var(--recess); color: var(--ink-2); flex: none; align-self: flex-start; margin-top: 12px; }
   .text { flex: 1; display: flex; flex-direction: column; gap: 1px; min-width: 0; }
   input { position: absolute; opacity: 0; width: 1px; height: 1px; }
   .track {
