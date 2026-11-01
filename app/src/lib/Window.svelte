@@ -70,7 +70,10 @@
         {/if}
 
         {#if app.link}
-          <div class="titlebar"><h2>Connection</h2></div>
+          <div class="titlebar">
+            <h2>Connection</h2>
+            {#if !app.hosting}<button class="btn" onclick={actions.becomeHost}>Become host</button>{/if}
+          </div>
           <div class="panel">
             <div class="linkhead">
               <StatusMark mark={app.link.status === 'connected' ? 'live' : 'connecting'} />
@@ -79,10 +82,25 @@
               <button class="btn" onclick={actions.disconnect}>Disconnect</button>
             </div>
             <div class="grid2">
-              <Switch label="Send system audio" hint="Everything this device plays" checked={app.link.send.system} onchange={(on) => actions.setSend('system', on)} />
-              <Switch label="Hear host audio" hint="What {app.link.host.name}'s apps play, without the mix" checked={app.link.hear.system} onchange={(on) => actions.setHear('system', on)} />
-              <Switch label="Send microphone" hint={app.devices.mic || app.devices.defaultMic} checked={app.link.send.mic} onchange={(on) => actions.setSend('mic', on)} />
-              <Switch label="Hear host mic" hint="{app.link.host.name}'s microphone, played here" checked={app.link.hear.mic} onchange={(on) => actions.setHear('mic', on)} />
+              <div class="group" role="group" aria-labelledby="send-head">
+                <h3 class="label" id="send-head">Send to {app.link.host.name}</h3>
+                <Switch label="System audio" hint="Everything this device plays" checked={app.link.send.system} onchange={(on) => actions.setSend('system', on)} />
+                <Switch
+                  label="Mute speakers while sending"
+                  hint={app.me.os === 'macos'
+                    ? 'This Mac stays quiet while its audio plays on the host. What Aonin plays still comes through.'
+                    : 'This PC stays quiet while its audio plays on the host, including what Aonin plays.'}
+                  checked={app.options.muteSpeakers}
+                  disabled={!app.link.send.system}
+                  onchange={(on) => actions.setMuteSpeakers(on)}
+                />
+                <Switch label="Microphone" hint={app.devices.mic || app.devices.defaultMic} checked={app.link.send.mic} onchange={(on) => actions.setSend('mic', on)} />
+              </div>
+              <div class="group" role="group" aria-labelledby="hear-head">
+                <h3 class="label" id="hear-head">Hear from {app.link.host.name}</h3>
+                <Switch label="Host audio" hint="What {app.link.host.name}'s apps play, without the mix" checked={app.link.hear.system} onchange={(on) => actions.setHear('system', on)} />
+                <Switch label="Host mic" hint="{app.link.host.name}'s microphone, played here" checked={app.link.hear.mic} onchange={(on) => actions.setHear('mic', on)} />
+              </div>
             </div>
           </div>
         {/if}
@@ -178,15 +196,6 @@
             </label>
           {/each}
         </div>
-        <div class="titlebar"><h2>Speakers</h2></div>
-        <Switch
-          label="Mute speakers while sending"
-          hint={app.me.os === 'macos'
-            ? 'This Mac stays quiet while its audio plays on a host. What Aonin plays still comes through.'
-            : 'This PC stays quiet while its audio plays on a host, including what Aonin plays. Back on when sending stops.'}
-          checked={app.options.muteSpeakers}
-          onchange={(on) => actions.setMuteSpeakers(on)}
-        />
         <div class="titlebar"><h2>Startup</h2></div>
         <Switch label="Reconnect automatically" hint="Join the last host as soon as Aonin opens" checked={app.options.reconnect} onchange={(on) => actions.setReconnect(on)} />
         <Switch label="Open at login" hint="Start Aonin in the background when you sign in" checked={app.options.startAtLogin} onchange={(on) => actions.setStartAtLogin(on)} />
@@ -235,7 +244,8 @@
   .panel { border-top: 1px solid var(--line); }
   .linkhead { display: flex; align-items: center; gap: 12px; min-height: 52px; border-bottom: 1px solid var(--line); }
   .linkhead .name { font-weight: 700; flex: 1; }
-  .grid2 { display: grid; grid-template-columns: 1fr 1fr; column-gap: 36px; }
+  .grid2 { display: grid; grid-template-columns: 1fr 1fr; column-gap: 36px; align-items: start; }
+  .group h3 { font-weight: 400; margin: 14px 0 0; padding-bottom: 6px; border-bottom: 1px solid var(--line); }
   .solo { display: flex; flex-direction: column; align-items: flex-start; gap: 14px; padding: 18px 0; }
   .solo p { font-weight: 600; }
   .hostrow { display: grid; grid-template-columns: 8px minmax(0, 1fr) auto; gap: 16px; align-items: center; min-height: 52px; border-bottom: 1px solid var(--line); }
