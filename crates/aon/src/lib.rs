@@ -5,5 +5,7 @@ pub mod audio;
 pub mod discovery;
 pub mod engine;
 pub mod net;
+#[cfg(target_os = "macos")]
+mod macloop;
 #[cfg(windows)]
 mod winloop;

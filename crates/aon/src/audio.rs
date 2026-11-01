@@ -59,7 +59,7 @@ pub struct Capture(#[allow(dead_code)] Box<dyn std::any::Any>);
 ///
 /// System audio never includes what Aonin itself plays: on Windows the
 /// default source uses process loopback excluding this process, and on macOS
-/// the (patched) cpal tap excludes it.
+/// a process tap on the chosen output excludes it.
 pub fn start_capture(source: Source, name: Option<&str>) -> Result<(Capture, Consumer<f32>, u32)> {
     #[cfg(windows)]
     if matches!(source, Source::System) && name.is_none() {
@@ -72,6 +72,14 @@ pub fn start_capture(source: Source, name: Option<&str>) -> Result<(Capture, Con
         }
     }
     let host = cpal::default_host();
+    #[cfg(target_os = "macos")]
+    if matches!(source, Source::System) {
+        let output = pick(host.output_devices()?, host.default_output_device(), name)?;
+        let (tap, device) = crate::macloop::start(output.id()?.id())?;
+        let supported = device.default_input_config()?;
+        println!("Capturing System from \"{output}\", every app except Aonin ({} Hz)", supported.config().sample_rate);
+        return run_capture(device, supported, Some(tap));
+    }
     let (device, supported) = match source {
         Source::System => {
             let d = pick(host.output_devices()?, host.default_output_device(), name)?;
@@ -84,13 +92,14 @@ pub fn start_capture(source: Source, name: Option<&str>) -> Result<(Capture, Con
             (d, c)
         }
     };
+    println!("Capturing {source:?} from \"{device}\" ({} ch, {} Hz, {:?})", supported.channels(), supported.sample_rate(), supported.sample_format());
+    run_capture(device, supported, None::<()>)
+}
+
+/// Open the input stream. `keep` (the macOS tap) is dropped after the stream.
+fn run_capture<K: 'static>(device: Device, supported: cpal::SupportedStreamConfig, keep: Option<K>) -> Result<(Capture, Consumer<f32>, u32)> {
     let config = supported.config();
     let rate = config.sample_rate;
-    println!("Capturing {source:?} from \"{device}\" ({} ch, {rate} Hz, {:?})", config.channels, supported.sample_format());
-    // System audio must come through the process tap, which leaves out our
-    // own playback, even when the output is a virtual loopback device.
-    cpal::aonin_force_loopback(matches!(source, Source::System));
-
     // 1 s of headroom; the sender drains it every ~1 ms.
     let (tx, rx) = RingBuffer::new(rate as usize * 2);
     let stream = match supported.sample_format() {
@@ -103,7 +112,7 @@ pub fn start_capture(source: Source, name: Option<&str>) -> Result<(Capture, Con
         f => bail!("unsupported sample format {f:?}"),
     }?;
     stream.play().context("starting capture")?;
-    Ok((Capture(Box::new(stream)), rx, rate))
+    Ok((Capture(Box::new((stream, keep))), rx, rate))
 }
 
 fn build_capture<T>(device: &Device, config: StreamConfig, mut tx: Producer<f32>) -> Result<Stream>
