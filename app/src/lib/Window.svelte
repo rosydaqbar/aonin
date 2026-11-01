@@ -1,5 +1,5 @@
 <script lang="ts">
-  import { AudioLines, Download, Info, Headphones, LogIn, Mic, Monitor, MonitorSmartphone, Network, Power, RefreshCw, SlidersHorizontal, Upload, VolumeX, Wifi } from '@lucide/svelte';
+  import { AudioLines, Download, Info, LogIn, Mic, Monitor, MonitorSmartphone, Network, Power, RefreshCw, SlidersHorizontal, VolumeX, Wifi } from '@lucide/svelte';
   import ClientRow from './ClientRow.svelte';
   import Issues from './Issues.svelte';
   import StatusMark from './StatusMark.svelte';
@@ -86,29 +86,31 @@
               <span class="label num">{app.link.status === 'connected' ? fmtMs(app.link.latencyMs) : 'Reconnecting…'}</span>
               <button class="btn" onclick={actions.disconnect}>Disconnect</button>
             </div>
-            <div class="grid2">
-              <div class="group" role="group" aria-labelledby="send-head">
-                <h3 class="label" id="send-head"><Upload size={13} strokeWidth={1.75} aria-hidden="true" />Send to {app.link.host.name}</h3>
-                <Switch icon={Monitor} label="System audio" hint="Everything this device plays" checked={app.link.send.system} onchange={(on) => actions.setSend('system', on)} />
-                <Switch
-                  icon={VolumeX}
-                  label="Mute speakers while sending"
-                  hint={app.me.os === 'macos'
-                    ? 'This Mac stays quiet while its audio plays on the host. What Aonin plays still comes through.'
-                    : 'This PC stays quiet while its audio plays on the host, including what Aonin plays.'}
-                  checked={app.options.muteSpeakers}
-                  disabled={!app.link.send.system}
-                  onchange={(on) => actions.setMuteSpeakers(on)}
-                />
-                <Switch icon={Mic} label="Microphone" hint={app.devices.mic || app.devices.defaultMic} checked={app.link.send.mic} onchange={(on) => actions.setSend('mic', on)} />
-              </div>
-              <div class="group" role="group" aria-labelledby="hear-head">
-                <h3 class="label" id="hear-head"><Headphones size={13} strokeWidth={1.75} aria-hidden="true" />Hear from {app.link.host.name}</h3>
-                <Switch icon={Monitor} label="Host audio" hint="What {app.link.host.name}'s apps play, without the mix" checked={app.link.hear.system} onchange={(on) => actions.setHear('system', on)} />
-                <Switch icon={Mic} label="Host mic" hint="{app.link.host.name}'s microphone, played here" checked={app.link.hear.mic} onchange={(on) => actions.setHear('mic', on)} />
-              </div>
-            </div>
           </div>
+
+          <div class="titlebar">
+            <h2>Send to {app.link.host.name}</h2>
+            <span class="label">From this {app.me.os === 'macos' ? 'Mac' : 'PC'}, played on {app.link.host.name}</span>
+          </div>
+          <Switch icon={Monitor} label="System audio" hint="Everything this device plays" checked={app.link.send.system} onchange={(on) => actions.setSend('system', on)} />
+          <Switch
+            icon={VolumeX}
+            label="Mute speakers while sending"
+            hint={app.me.os === 'macos'
+              ? 'This Mac stays quiet while its audio plays on the host. What Aonin plays still comes through.'
+              : 'This PC stays quiet while its audio plays on the host, including what Aonin plays.'}
+            checked={app.options.muteSpeakers}
+            disabled={!app.link.send.system}
+            onchange={(on) => actions.setMuteSpeakers(on)}
+          />
+          <Switch icon={Mic} label="Microphone" hint={app.devices.mic || app.devices.defaultMic} checked={app.link.send.mic} onchange={(on) => actions.setSend('mic', on)} />
+
+          <div class="titlebar">
+            <h2>Hear from {app.link.host.name}</h2>
+            <span class="label">From {app.link.host.name}, played on this {app.me.os === 'macos' ? 'Mac' : 'PC'}</span>
+          </div>
+          <Switch icon={Monitor} label="Host audio" hint="What {app.link.host.name}'s apps play, without the mix" checked={app.link.hear.system} onchange={(on) => actions.setHear('system', on)} />
+          <Switch icon={Mic} label="Host mic" hint="{app.link.host.name}'s microphone" checked={app.link.hear.mic} onchange={(on) => actions.setHear('mic', on)} />
         {/if}
 
         {#if !app.hosting && !app.link}
@@ -294,7 +296,6 @@
   .panel { border-top: 1px solid var(--line); }
   .linkhead { display: flex; align-items: center; gap: 12px; min-height: 52px; border-bottom: 1px solid var(--line); }
   .linkhead .name { font-weight: 700; flex: 1; }
-  .grid2 { display: grid; grid-template-columns: 1fr 1fr; column-gap: 36px; align-items: start; }
   .about { display: flex; align-items: center; gap: 16px; margin: 22px 0 14px; }
   .about img { border-radius: 14px; }
   .about h2 { font-size: 20px; }
@@ -305,7 +306,6 @@
   .update { display: flex; align-items: center; gap: 12px; min-height: 52px; border-bottom: 1px solid var(--line); }
   .update .icon { display: grid; place-items: center; width: 28px; height: 28px; border-radius: 7px; background: var(--recess); color: var(--ink-2); flex: none; }
   .update .text { flex: 1; display: flex; flex-direction: column; gap: 1px; min-width: 0; }
-  .group h3 { display: flex; align-items: center; gap: 6px; font-weight: 400; margin: 14px 0 0; padding-bottom: 6px; border-bottom: 1px solid var(--line); }
   .solo { display: flex; flex-direction: column; align-items: flex-start; gap: 14px; padding: 18px 0; }
   .solo p { font-weight: 600; }
   .hostrow { display: grid; grid-template-columns: 8px minmax(0, 1fr) auto; gap: 16px; align-items: center; min-height: 52px; border-bottom: 1px solid var(--line); }
