@@ -505,10 +505,17 @@ impl Engine {
     fn send_want(&self, host: SocketAddr, port: u16, hear: Sends) {
         let mut buf = Vec::new();
         protocol::encode_want(&mut buf, self.me.device, port, hear.system, hear.mic);
-        // macOS answers "no route to host" (EHOSTUNREACH) for every local
-        // address while Aonin lacks Local Network access; nothing gets through.
-        let blocked = matches!(self.ctrl.send_to(&buf, host), Err(e) if cfg!(target_os = "macos") && e.raw_os_error() == Some(65));
-        self.local_net_blocked.store(blocked, Relaxed);
+        // Without Local Network access macOS drops every packet to the LAN,
+        // but reports it ("no route to host", EHOSTUNREACH) only on the first
+        // few sends; later ones look fine. So the flag stays set until the
+        // host actually answers (see `tick`).
+        if let Err(e) = self.ctrl.send_to(&buf, host)
+            && cfg!(target_os = "macos")
+            && e.raw_os_error() == Some(65)
+            && !self.local_net_blocked.swap(true, Relaxed)
+        {
+            eprintln!("macOS blocks Aonin from {host}: Local Network access is off");
+        }
     }
 
     /// Ask the host to stream its own audio and/or mic back to us, played on
@@ -714,6 +721,7 @@ impl Engine {
         while let Ok((n, _)) = self.ctrl.recv_from(&mut buf) {
             if let Some(protocol::Packet::Status { .. }) = protocol::decode(&buf[..n]) {
                 *self.last_ack.lock().unwrap() = Some(Instant::now());
+                self.local_net_blocked.store(false, Relaxed);
             }
         }
         if let Some(l) = self.link.lock().unwrap().as_ref() {
