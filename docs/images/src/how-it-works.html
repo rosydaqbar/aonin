@@ -227,10 +227,11 @@ function lock(g, x, y, color) {
 // ---- cable and headphones ----
 const P = document.getElementById('phones');
 {
-  const ox = LX + LW, oy = LY + 300;
+  // The mix leaves from the listener itself (its strip), not from a sender row.
+  const ox = LX + LW, oy = LY + 28;
   el('circle', { cx: ox, cy: oy, r: 6, fill: C.raised, stroke: C.strong, 'stroke-width': 1.5 }, P);
-  el('path', { d: `M${ox + 6} ${oy} C ${ox + 50} ${oy}, ${ox + 40} ${oy - 70}, ${ox + 86} ${oy - 92}`, fill: 'none', stroke: C.strip, 'stroke-width': 3, 'stroke-linecap': 'round' }, P);
-  const hx = 1490, hy = 360;
+  el('path', { d: `M${ox + 6} ${oy} L${ox + 31} ${oy}`, fill: 'none', stroke: C.strip, 'stroke-width': 3, 'stroke-linecap': 'round' }, P);
+  const hx = 1490, hy = oy - 25;
   // band
   el('path', { d: `M${hx - 46} ${hy + 10} v-14 a46 46 0 0 1 92 0 v14`, fill: 'none', stroke: C.strip, 'stroke-width': 9, 'stroke-linecap': 'round' }, P);
   // cups
@@ -241,8 +242,8 @@ const P = document.getElementById('phones');
   // sound waves
   const waves = el('g', { id: 'waves' }, P);
   for (let i = 0; i < 0; i++) el('path', { d: `M${hx - 20 + i * 0} ${hy + 76 + i * 12} q20 -10 40 0`, fill: 'none', stroke: C.orange, 'stroke-width': 2, 'stroke-linecap': 'round', class: 'wave' }, waves);
-  el('text', { x: hx, y: hy + 132, 'text-anchor': 'middle', class: 't-net' }, P, 'One mix');
-  el('text', { x: hx, y: hy + 152, 'text-anchor': 'middle', class: 't-small' }, P, 'Headphones or speakers');
+  el('text', { x: hx, y: hy + 86, 'text-anchor': 'middle', class: 't-net' }, P, 'One mix');
+  el('text', { x: hx, y: hy + 106, 'text-anchor': 'middle', class: 't-small' }, P, 'Headphones or speakers');
 }
 
 // ---- features ----
