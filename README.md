@@ -103,7 +103,7 @@ See [docs/roadmap.md](docs/roadmap.md) for how each V1 feature will be built.
 
 ### V1.1
 
-- [ ] Android and iOS: listen and send the mic first, then listener, then system audio where the OS allows it. Waits for the Google Play and App Store developer accounts. Plan: [docs/roadmap.md](docs/roadmap.md#3-android-and-ios-v11).
+- [ ] Android and iOS: listen and send the mic first, then listener, then system audio where the OS allows it. Plan: [docs/roadmap.md](docs/roadmap.md#3-android-and-ios-v11).
 
 ### V1.2
 
