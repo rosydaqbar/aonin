@@ -110,7 +110,7 @@
 
   {#if app.outputLost && app.hosting}
     <div class="alert lost" role="status">
-      <p>{app.hosting.output} was disconnected. Playing again when it's back.</p>
+      <p>{app.hosting.output} isn't playing. It may be unplugged, or another app may be holding it. Aonin keeps trying.</p>
       <button class="btn" onclick={() => actions.openWindow('audio')}>Choose output</button>
     </div>
   {/if}

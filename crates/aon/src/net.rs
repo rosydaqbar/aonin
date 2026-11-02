@@ -23,6 +23,8 @@ const HISTORY: usize = 512;
 /// goes quiet when nothing plays), send silence to keep the stream alive.
 const CAPTURE_STALL: Duration = Duration::from_millis(40);
 const SOURCE_TIMEOUT: Duration = Duration::from_secs(5);
+/// An open output that hasn't asked for audio this long is stuck.
+const OUTPUT_STALL: Duration = Duration::from_millis(1500);
 const HELLO_EVERY: Duration = Duration::from_secs(1);
 
 /// Lock-free f32 cell for numbers the UI polls.
@@ -481,6 +483,10 @@ pub fn run_hub(
     let mut output: Option<audio::Output> = None;
     let mut retry_at = Instant::now();
     let mut default_check = Instant::now();
+    // Output callbacks seen, and when that count last moved.
+    let mut calls = (0u32, Instant::now());
+    // The last output opened fine but never played.
+    let mut stalled = false;
 
     let join = |sources: &mut HashMap<(SocketAddr, u32), Incoming>, addr: SocketAddr, stream: u32, output: Option<&audio::Output>| {
         sources.entry((addr, stream)).or_insert_with(|| {
@@ -509,7 +515,9 @@ pub fn run_hub(
             match open() {
                 Ok(o) => {
                     *shared.output.lock().unwrap() = o.device.clone();
-                    shared.output_lost.store(false, Relaxed);
+                    // After a stall, stay "lost" until this one really plays.
+                    shared.output_lost.store(stalled, Relaxed);
+                    calls = (0, now);
                     for src in sources.values_mut() {
                         attach(src, Some(&o));
                     }
@@ -522,6 +530,27 @@ pub fn run_hub(
                     shared.output_lost.store(true, Relaxed);
                     retry_at = now + Duration::from_secs(1);
                 }
+            }
+        }
+
+        // An output that stops asking for audio is as good as gone: reopen
+        // it, and say so if it stays silent.
+        if let Some(o) = output.as_ref() {
+            let n = o.calls.load(Relaxed);
+            if n != calls.0 {
+                calls = (n, now);
+                if stalled {
+                    stalled = false;
+                    shared.output_lost.store(false, Relaxed);
+                }
+            } else if now - calls.1 > OUTPUT_STALL && !o.failed.load(Relaxed) {
+                if verbose {
+                    println!("output stalled: {} isn't asking for audio", o.device);
+                }
+                stalled = true;
+                shared.output_lost.store(true, Relaxed);
+                o.failed.store(true, Relaxed);
+                retry_at = now + Duration::from_secs(2);
             }
         }
 

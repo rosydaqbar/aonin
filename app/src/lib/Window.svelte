@@ -104,7 +104,7 @@
         <p class="alert" role="alert">{app.error}</p>
       {/if}
       {#if app.outputLost}
-        <p class="alert" role="status">Output device disconnected. Aonin will resume as soon as it's back.</p>
+        <p class="alert" role="status">The output device isn't playing. It may be unplugged, or another app may be holding it. Aonin resumes as soon as it plays again.</p>
       {/if}
 
       {#if section === 'devices'}
