@@ -16,6 +16,8 @@
   let idle = $derived(!app.hosting && !app.link);
   // "Make private" isn't built yet: say so inline for a few seconds.
   let soon = $state(false);
+  /** The audio sender whose "Make listener" is waiting for confirmation. */
+  let confirmId = $state<string | null>(null);
   let soonTimer: ReturnType<typeof setTimeout> | undefined;
   function showSoon() {
     soon = true;
@@ -50,7 +52,7 @@
 <div class="pop">
   <header class="strip">
     <span class="me" title={app.me.name}>{app.me.name}</span>
-    <span class="role"><i style:background={dot}></i>{roleLine(app)}</span>
+    <span class="role"><i style:background={dot}></i>{roleLine(app, true)}</span>
     {#if app.hosting}
       <button class="stop" onclick={actions.stopHosting}>{app.link ? 'Stop listening' : 'Stop'}</button>
     {/if}
@@ -130,7 +132,16 @@
         <span class="label" title="Output">{app.outputLost ? 'No output' : `To ${app.hosting.output}`}</span>
       </div>
       {#each app.hosting.clients as row (row.id)}
-        <ClientRow {row} lost={app.outputLost} />
+        <ClientRow {row} lost={app.outputLost} onmake={app.handingOver ? undefined : () => (confirmId = confirmId === row.id ? null : row.id)} />
+        {#if confirmId === row.id}
+          <div class="confirm" role="group" aria-label="Make {row.name} the listener">
+            <p>Play everyone's audio on {row.name}? This device will send its audio there.</p>
+            <span class="actions">
+              <button class="btn quiet" onclick={() => (confirmId = null)}>Cancel</button>
+              <button class="btn primary" onclick={() => { confirmId = null; actions.handOver(row.id); }}>Make listener</button>
+            </span>
+          </div>
+        {/if}
       {:else}
         <p class="wait">Waiting for audio senders. Open Aonin on another device on this network.</p>
       {/each}
@@ -244,6 +255,9 @@
   }
   .tip:hover .bubble, .info:focus-visible + .bubble { opacity: 1; visibility: visible; }
   @media (prefers-reduced-motion: reduce) { .bubble { transition: none; } }
+  .confirm { padding: 10px 0 12px; border-bottom: 1px solid var(--line); }
+  .confirm p { font-size: var(--size-s); line-height: 1.45; }
+  .confirm .actions { display: flex; justify-content: flex-end; gap: 6px; margin-top: 8px; }
   .soon { padding: 8px 16px; border-bottom: 1px solid var(--line); background: var(--recess); font-size: var(--size-s); }
   .make { margin-left: auto; display: inline-flex; align-items: center; gap: 6px; }
   .alert { margin: 12px 16px 0; padding: 9px 12px; border-radius: 8px; background: var(--red-wash); color: var(--ink); }

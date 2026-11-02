@@ -6,7 +6,7 @@
   import { actions } from './actions';
 
   /** `lost`: the host's output device is gone, so nothing is actually playing. */
-  /** `onmake`: offer to make this device the listener (wide rows only). */
+  /** `onmake`: offer to make this device the listener. */
   let { row, wide = false, lost = false, onmake }: { row: ClientRow; wide?: boolean; lost?: boolean; onmake?: () => void } = $props();
 
   let what = $derived(
@@ -55,15 +55,17 @@
     </button>
   {#if wide}
     <button class="btn make" onclick={onmake} disabled={!onmake}><ArrowLeftRight size={13} strokeWidth={1.75} />Make listener</button>
+  {:else}
+    <button class="icon" onclick={onmake} disabled={!onmake} title="Make listener" aria-label="Make {row.name} the listener"><ArrowLeftRight size={14} strokeWidth={1.75} /></button>
   {/if}
 </div>
 
 <style>
   .row {
     display: grid;
-    grid-template-columns: 8px minmax(0, 1fr) auto 64px 28px;
+    grid-template-columns: 8px minmax(0, 1fr) auto 56px 28px 28px;
     align-items: center;
-    gap: 10px;
+    gap: 8px;
     min-height: var(--row);
     border-bottom: 1px solid var(--line);
   }
@@ -86,7 +88,8 @@
     place-items: center;
     color: var(--ink);
   }
-  .icon:hover { border-color: var(--ink-2); }
+  .icon:hover:not(:disabled) { border-color: var(--ink-2); }
+  .icon:disabled { opacity: 0.45; }
   .icon.on { background: var(--strip); border-color: var(--strip); color: var(--strip-ink); }
   .make { display: inline-flex; align-items: center; gap: 6px; padding: 0 12px; white-space: nowrap; justify-content: center; }
 </style>

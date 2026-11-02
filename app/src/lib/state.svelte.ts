@@ -193,13 +193,15 @@ export async function followBackend() {
   await listen<AppState>('state', (e) => Object.assign(app, e.payload));
 }
 
-/** A device reads as "connected somewhere" in the strip. */
-export function roleLine(s: AppState): string {
+/** A device reads as "connected somewhere" in the strip. `short`: the
+ *  narrow menu strip, where the device count is shown below anyway. */
+export function roleLine(s: AppState, short = false): string {
   if (s.issues.length) return 'Needs permission';
-  if (s.handingOver) return `Handing over to ${s.handingOver}…`;
+  if (s.handingOver) return short ? 'Handing over…' : `Handing over to ${s.handingOver}…`;
   if (s.hosting && s.outputLost) return 'Output lost';
-  if (s.hosting && s.link) return 'Listening · also sending';
+  if (s.hosting && s.link) return short ? 'Listening' : 'Listening · also sending';
   if (s.hosting) {
+    if (short) return 'Listening';
     const n = s.hosting.clients.length;
     return n === 0 ? 'Listening · no audio senders yet' : `Listening · ${n} ${n === 1 ? 'audio sender' : 'audio senders'}`;
   }
