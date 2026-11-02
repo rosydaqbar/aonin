@@ -168,3 +168,24 @@ input[type='range']::-webkit-slider-thumb {
 input[type='range']:disabled::-webkit-slider-runnable-track {
   background: linear-gradient(to right, var(--ink-2) var(--p), var(--line) var(--p));
 }
+
+/* Text fields: same height and radius as selects. */
+.field {
+  height: 32px;
+  padding: 0 10px;
+  border-radius: 8px;
+  border: 1px solid var(--line-strong);
+  background: var(--raised);
+  width: 100%;
+  user-select: text;
+  cursor: text;
+}
+.field:focus-visible { outline: 2px solid var(--focus); outline-offset: 1px; border-radius: 8px; }
+
+/* A join code: six characters read off one screen and typed on another. */
+.code {
+  font-family: ui-monospace, 'SF Mono', Menlo, Consolas, monospace;
+  font-weight: 600;
+  letter-spacing: 0.14em;
+  font-feature-settings: normal;
+}

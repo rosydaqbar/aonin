@@ -41,6 +41,15 @@ struct Config {
     quiet_wifi: bool,
     #[serde(default)]
     mute_speakers: Option<bool>,
+    /// The name others see while this device listens.
+    #[serde(default)]
+    listen_name: Option<String>,
+    /// Set while listening privately: the code audio senders type.
+    #[serde(default)]
+    private_code: Option<String>,
+    /// The code of `last_host` when it is private, to rejoin after a restart.
+    #[serde(default)]
+    last_code: Option<String>,
 }
 
 fn config_path(app: &AppHandle) -> Option<PathBuf> {
@@ -143,6 +152,29 @@ fn parse_host(id: &str) -> Result<u64, String> {
 #[tauri::command(async)]
 fn become_host(engine: Eng) -> Result<(), String> {
     engine.become_host().map_err(err)
+}
+
+/// Start listening from the setup form: a name, and a code when private.
+#[tauri::command(async)]
+fn start_listening(engine: Eng, name: Option<String>, code: Option<String>) -> Result<(), String> {
+    engine.start_listening(name, code).map_err(err)
+}
+
+/// Make the running listener private with `code`, or public with none.
+#[tauri::command(async)]
+fn set_private(engine: Eng, code: Option<String>) -> Result<(), String> {
+    engine.set_private(code).map_err(err)
+}
+
+/// Join the private listener showing `code`; the outcome arrives in the state.
+#[tauri::command(async)]
+fn join_code(engine: Eng, code: String) -> Result<(), String> {
+    engine.join_code(&code).map_err(err)
+}
+
+#[tauri::command(async)]
+fn cancel_join(engine: Eng) {
+    engine.cancel_join();
 }
 
 #[tauri::command(async)]
@@ -279,11 +311,20 @@ fn start_poller(app: AppHandle, engine: Arc<Engine>, mut cfg: Config) {
             state["version"] = app.package_info().version.to_string().into();
             state["update"] = app.state::<Pending>().0.lock().unwrap().as_ref().map(|(u, _)| u.version.clone()).into();
             let _ = app.emit("state", &state);
-            if engine.last_host() != cfg.last_host || engine.was_hosting() != cfg.was_hosting {
+            let s = engine.saved();
+            let changed = s.last_host != cfg.last_host
+                || s.was_hosting != cfg.was_hosting
+                || s.last_code != cfg.last_code
+                || s.listen_name != cfg.listen_name
+                || s.private_code != cfg.private_code;
+            if changed {
                 // Reload first: other settings may have been saved meanwhile.
                 cfg = load_config(&app);
-                cfg.last_host = engine.last_host();
-                cfg.was_hosting = engine.was_hosting();
+                cfg.last_host = s.last_host;
+                cfg.was_hosting = s.was_hosting;
+                cfg.last_code = s.last_code;
+                cfg.listen_name = s.listen_name;
+                cfg.private_code = s.private_code;
                 save_config(&app, &cfg);
             }
             std::thread::sleep(Duration::from_millis(100));
@@ -405,6 +446,9 @@ pub fn run() {
                 start_at_login: app.autolaunch().is_enabled().unwrap_or(false),
                 quiet_wifi: cfg.quiet_wifi,
                 mute_speakers: cfg.mute_speakers.unwrap_or(true),
+                listen_name: cfg.listen_name.clone(),
+                private_code: cfg.private_code.clone(),
+                last_code: cfg.last_code.clone(),
             };
             let engine = Engine::new(cfg.device, name, prefs);
             // Pick up the role this device had when Aonin last ran.
@@ -446,6 +490,10 @@ pub fn run() {
             set_tray_active,
             quit,
             become_host,
+            start_listening,
+            set_private,
+            join_code,
+            cancel_join,
             stop_hosting,
             hand_over,
             connect,

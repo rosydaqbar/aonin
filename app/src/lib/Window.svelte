@@ -1,13 +1,15 @@
 <script lang="ts">
-  import { AudioLines, Download, Globe, Info, Lock, LogIn, Mic, Monitor, MonitorSmartphone, Network, Power, RefreshCw, SlidersHorizontal, VolumeX, Wifi } from '@lucide/svelte';
+  import { AudioLines, Copy, Download, Globe, Info, Lock, LogIn, Mic, Monitor, MonitorSmartphone, Network, Power, RefreshCw, SlidersHorizontal, VolumeX, Wifi } from '@lucide/svelte';
   import ClientRow from './ClientRow.svelte';
-  import ComingSoon from './ComingSoon.svelte';
   import Confirm from './Confirm.svelte';
   import Issues from './Issues.svelte';
+  import JoinForm from './JoinForm.svelte';
+  import ListenForm from './ListenForm.svelte';
+  import Modal from './Modal.svelte';
   import StatusMark from './StatusMark.svelte';
   import Switch from './Switch.svelte';
   import { actions, type Section } from './actions';
-  import { app, fmtMs, QUALITY, roleLine, type Quality } from './state.svelte';
+  import { app, fmtCode, fmtMs, newCode, QUALITY, roleLine, type Quality } from './state.svelte';
 
   const sections: Section[] = ['devices', 'audio', 'network', 'advanced', 'about'];
   const sectionIcons = { devices: MonitorSmartphone, audio: AudioLines, network: Network, advanced: SlidersHorizontal, about: Info };
@@ -24,7 +26,25 @@
     }
   }
   let section = $state<Section>(readHash());
-  let soon = $state(false);
+  /** The Become listener or Join form, shown as a dialog. */
+  let form = $state<'listen' | 'join' | null>(null);
+  $effect(() => {
+    if (form === 'join' && app.link) form = null;
+  });
+  /** Turning private drops audio senders without the code: ask first. */
+  let confirmPrivate = $state(false);
+  function makePrivate() {
+    if (app.hosting?.clients.length) confirmPrivate = true;
+    else actions.setPrivate(newCode());
+  }
+  let copied = $state(false);
+  async function copyCode(code: string) {
+    try {
+      await navigator.clipboard.writeText(code);
+      copied = true;
+      setTimeout(() => (copied = false), 1500);
+    } catch {}
+  }
   /** The audio sender the user asked to make the listener, awaiting confirmation. */
   let makeTarget = $state<{ id: string; name: string } | null>(null);
 
@@ -42,18 +62,30 @@
 <div class="win">
   <header class="strip">
     <span class="brand">Aonin</span>
-    <span class="me">{app.me.name} · {app.me.os === 'macos' ? 'macOS' : 'Windows'}</span>
+    <span class="me">{app.hosting?.name ?? app.me.name} · {app.me.os === 'macos' ? 'macOS' : 'Windows'}</span>
     <span class="role"><i style:background={dot}></i>{roleLine(app)}</span>
   </header>
 
-  {#if app.hosting}
+  {#if app.hosting?.code}
+    {@const code = app.hosting.code}
+    <div class="vis">
+      <span class="icon" aria-hidden="true"><Lock size={16} strokeWidth={1.75} /></span>
+      <span class="text">
+        <span class="title">Private</span>
+        <span class="label">Only devices with the code can join. Audio senders type it under Join.</span>
+      </span>
+      <span class="bigcode code" aria-label="Code {code.split('').join(' ')}">{fmtCode(code)}</span>
+      <button class="btn" onclick={() => copyCode(code)}><Copy size={14} strokeWidth={1.75} />{copied ? 'Copied' : 'Copy code'}</button>
+      <button class="btn" onclick={() => actions.setPrivate(null)}><Globe size={14} strokeWidth={1.75} />Make public</button>
+    </div>
+  {:else if app.hosting}
     <div class="vis">
       <span class="icon" aria-hidden="true"><Globe size={16} strokeWidth={1.75} /></span>
       <span class="text">
         <span class="title">Visible to public</span>
         <span class="label">Anyone on this network can join.</span>
       </span>
-      <button class="btn" onclick={() => (soon = true)}><Lock size={14} strokeWidth={1.75} />Make private</button>
+      <button class="btn" onclick={makePrivate}><Lock size={14} strokeWidth={1.75} />Make private</button>
     </div>
   {/if}
 
@@ -85,17 +117,17 @@
           {#if app.hosting.clients.length}
             <div class="cols label"><span></span><span>Device</span><span>Level</span><span class="r">Latency</span><span>Volume</span><span></span><span></span></div>
             {#each app.hosting.clients as row (row.id)}
-              <ClientRow {row} wide lost={app.outputLost} onmake={app.handingOver ? undefined : () => (makeTarget = { id: row.id, name: row.name })} />
+              <ClientRow {row} wide lost={app.outputLost} onmake={app.handingOver || app.hosting.code ? undefined : () => (makeTarget = { id: row.id, name: row.name })} />
             {/each}
           {:else}
-            <p class="empty">Waiting for audio senders. Open Aonin on another device on this network and it will appear here.</p>
+            <p class="empty">{app.hosting.code ? "Waiting for audio senders. On another device, open Aonin, choose Join and type the code above." : "Waiting for audio senders. Open Aonin on another device on this network and it will appear here."}</p>
           {/if}
         {/if}
 
         {#if app.link}
           <div class="titlebar">
             <h2>Connection</h2>
-            {#if !app.hosting}<button class="btn" onclick={actions.becomeHost}>Become listener</button>{/if}
+            {#if !app.hosting}<button class="btn" onclick={() => (form = 'listen')}>Become listener</button>{/if}
           </div>
           <div class="panel">
             <div class="linkhead">
@@ -134,12 +166,21 @@
         {#if !app.hosting && !app.link}
           <div class="titlebar">
             <h2>Listeners on this network</h2>
-            {#if app.hosts.length}<button class="btn" onclick={actions.becomeHost}>Become listener</button>{/if}
+            {#if app.hosts.length}
+              <span class="pair">
+                <button class="btn" onclick={() => (form = 'join')}>Join with code</button>
+                <button class="btn" onclick={() => (form = 'listen')}>Become listener</button>
+              </span>
+            {/if}
           </div>
           {#if app.hosts.length === 0}
             <div class="solo">
               <p>No listener on this network yet.</p>
-              <button class="btn primary" onclick={actions.becomeHost}>Become listener</button>
+              <span class="pair">
+                <button class="btn primary" onclick={() => (form = 'listen')}>Become listener</button>
+                <button class="btn" onclick={() => (form = 'join')}>Join</button>
+              </span>
+              <p class="label">Joining a private listener? Use Join and type its code.</p>
             </div>
           {/if}
         {/if}
@@ -274,7 +315,24 @@
   </div>
 </div>
 
-<ComingSoon bind:open={soon} />
+{#if form}
+  <Modal label={form === 'listen' ? 'Become the listener' : 'Join a private listener'} onclose={() => { if (form === 'join') actions.cancelJoin(); form = null; }}>
+    {#if form === 'listen'}
+      <ListenForm oncancel={() => (form = null)} ondone={() => (form = null)} />
+    {:else}
+      <JoinForm oncancel={() => (form = null)} />
+    {/if}
+  </Modal>
+{/if}
+{#if confirmPrivate}
+  <Confirm
+    title="Make this listener private?"
+    body="Audio senders will need the code to stay connected. They type it under Join."
+    action="Make private"
+    onconfirm={() => actions.setPrivate(newCode())}
+    onclose={() => (confirmPrivate = false)}
+  />
+{/if}
 {#if makeTarget}
   {@const t = makeTarget}
   <Confirm
@@ -294,6 +352,10 @@
   .vis .text { flex: 1; display: flex; flex-direction: column; gap: 1px; min-width: 0; }
   .vis .title { font-weight: 700; }
   .vis .btn { display: inline-flex; align-items: center; gap: 6px; flex: none; }
+  .bigcode { font-size: 18px; padding: 0 6px; user-select: text; cursor: text; }
+  .pair { display: flex; gap: 8px; }
+  .titlebar h2 + .pair { margin-left: auto; }
+  .solo p.label { font-weight: 400; }
   .strip { background: var(--strip); color: var(--strip-ink); display: flex; align-items: center; gap: 14px; padding: 0 20px; }
   .brand { font-weight: 700; font-size: var(--size); letter-spacing: 0.02em; }
   .me { font-size: var(--size-s); letter-spacing: 0.04em; color: var(--strip-ink-2); }

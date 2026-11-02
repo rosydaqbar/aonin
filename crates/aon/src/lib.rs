@@ -6,6 +6,7 @@ pub mod discovery;
 pub mod engine;
 pub mod net;
 pub mod permissions;
+pub mod private;
 #[cfg(target_os = "macos")]
 mod macloop;
 #[cfg(windows)]

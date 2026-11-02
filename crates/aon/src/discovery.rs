@@ -20,6 +20,9 @@ const EXPIRE: Duration = Duration::from_secs(4);
 #[derive(Clone, Debug, Default, Serialize, Deserialize, PartialEq)]
 pub struct Advert {
     pub id: u64,
+    /// Left out by a private listener. 0.1.x devices need it, so they skip
+    /// private listeners instead of showing a nameless one.
+    #[serde(default, skip_serializing_if = "String::is_empty")]
     pub name: String,
     pub macos: bool,
     pub hosting: bool,
@@ -33,6 +36,10 @@ pub struct Advert {
     /// device starts listening, and every audio sender follows it.
     #[serde(default)]
     pub handover: Option<u64>,
+    /// A private listener: only devices with its code can join, so it isn't
+    /// listed, and joining starts by typing the code.
+    #[serde(default)]
+    pub private: bool,
 }
 
 #[derive(Clone, Debug)]
@@ -125,7 +132,7 @@ mod tests {
 
     #[test]
     fn advert_roundtrips_as_json() {
-        let a = Advert { id: 42, name: "office-mac".into(), macos: true, hosting: true, port: 47_100, clients: 2, sources: vec![7, 9], handover: Some(7) };
+        let a = Advert { id: 42, name: "office-mac".into(), macos: true, hosting: true, port: 47_100, clients: 2, sources: vec![7, 9], handover: Some(7), private: false };
         let j = serde_json::to_vec(&a).unwrap();
         assert_eq!(serde_json::from_slice::<Advert>(&j).unwrap(), a);
     }
@@ -135,5 +142,15 @@ mod tests {
     fn old_beacon_without_handover_parses() {
         let j = br#"{"id":1,"name":"pc","macos":false,"hosting":true,"port":47100,"clients":0,"sources":[]}"#;
         assert_eq!(serde_json::from_slice::<Advert>(j).unwrap().handover, None);
+    }
+
+    /// A private listener's beacon has no name, which the 0.1.x `Advert`
+    /// (where `name` is required) refuses, so old devices don't list it.
+    #[test]
+    fn private_beacon_leaves_out_the_name() {
+        let a = Advert { id: 3, hosting: true, private: true, port: 47_100, ..Default::default() };
+        let j = String::from_utf8(serde_json::to_vec(&a).unwrap()).unwrap();
+        assert!(!j.contains("name"), "{j}");
+        assert_eq!(serde_json::from_str::<Advert>(&j).unwrap(), a);
     }
 }

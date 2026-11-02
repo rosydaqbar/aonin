@@ -49,6 +49,12 @@ enum Cmd {
         /// after this many seconds, then keep reporting.
         #[arg(long)]
         hand_over_after: Option<u64>,
+        /// Listen privately with a code (6 letters and numbers); `new` makes one.
+        #[arg(long)]
+        private: Option<String>,
+        /// The name audio senders see.
+        #[arg(long)]
+        name: Option<String>,
     },
     /// Join a host found on the network through the app engine.
     Join {
@@ -66,6 +72,9 @@ enum Cmd {
         /// Where to play what comes back (substring). Default: system default.
         #[arg(long)]
         output: Option<String>,
+        /// Join the private listener with this code instead of a public one.
+        #[arg(long)]
+        code: Option<String>,
         /// Seconds to stay connected.
         #[arg(long, default_value_t = 30)]
         seconds: u64,
@@ -118,9 +127,13 @@ fn main() -> Result<()> {
             println!("{:?}", c.get());
             Ok(())
         }
-        Cmd::Host { output, hand_over_after } => {
+        Cmd::Host { output, hand_over_after, private, name } => {
             let engine = cli_engine(output);
-            engine.become_host()?;
+            let code = private.map(|c| if c == "new" { aon::private::new_code() } else { c });
+            if let Some(c) = &code {
+                println!("private, code {c}");
+            }
+            engine.start_listening(name, code)?;
             let start = std::time::Instant::now();
             let mut handed = false;
             loop {
@@ -139,24 +152,42 @@ fn main() -> Result<()> {
                 }
             }
         }
-        Cmd::Join { name, hear_system, hear_mic, no_send, output, seconds, reconnect, disconnect_after } => {
+        Cmd::Join { name, hear_system, hear_mic, no_send, output, code, seconds, reconnect, disconnect_after } => {
             let engine = cli_engine(output);
             engine.set_reconnect(reconnect);
             let want = name.map(|n| n.to_lowercase());
             let deadline = std::time::Instant::now() + std::time::Duration::from_secs(10);
-            let host = loop {
-                let snap = engine.tick();
-                let found = snap.host_ids().into_iter().find(|(_, n, ok)| *ok && want.as_ref().is_none_or(|w| n.to_lowercase().contains(w)));
-                if let Some((id, n, _)) = found {
-                    println!("found host {n}");
-                    break id;
+            if let Some(code) = code {
+                // Give discovery a moment to see the listener, then pair.
+                std::thread::sleep(std::time::Duration::from_millis(1500));
+                engine.tick();
+                engine.join_code(&code)?;
+                loop {
+                    std::thread::sleep(std::time::Duration::from_millis(100));
+                    let snap = engine.tick();
+                    if snap.is_linked() {
+                        println!("joined: {}", snap.summary());
+                        break;
+                    }
+                    if let Some(e) = snap.join_failed() {
+                        anyhow::bail!("{e}");
+                    }
                 }
-                if std::time::Instant::now() > deadline {
-                    anyhow::bail!("no matching host on the network ({})", snap.summary());
-                }
-                std::thread::sleep(std::time::Duration::from_millis(250));
-            };
-            engine.connect(aon::engine::parse_id(&host).unwrap())?;
+            } else {
+                let host = loop {
+                    let snap = engine.tick();
+                    let found = snap.host_ids().into_iter().find(|(_, n, ok)| *ok && want.as_ref().is_none_or(|w| n.to_lowercase().contains(w)));
+                    if let Some((id, n, _)) = found {
+                        println!("found host {n}");
+                        break id;
+                    }
+                    if std::time::Instant::now() > deadline {
+                        anyhow::bail!("no matching host on the network ({})", snap.summary());
+                    }
+                    std::thread::sleep(std::time::Duration::from_millis(250));
+                };
+                engine.connect(aon::engine::parse_id(&host).unwrap())?;
+            }
             if no_send {
                 engine.set_send(aon_core::protocol::Source::System, false);
             }
@@ -207,7 +238,7 @@ fn main() -> Result<()> {
                 audio::Source::Mic => aon_core::protocol::Source::Mic,
             };
             let quality = aon_core::protocol::Quality::from_name(&quality).ok_or_else(|| anyhow::anyhow!("quality must be highest, cd, balanced or saver"))?;
-            let cfg = net::SendConfig { hub, who, source: kind, quality, drop_percent, verbose: true };
+            let cfg = net::SendConfig { hub, who, source: kind, quality, drop_percent, verbose: true, cipher: None };
             let shared = std::sync::Arc::new(net::SendShared::default());
             if let Some(to) = move_to {
                 let (to, s) = (resolve(&to)?, shared.clone());
@@ -227,7 +258,7 @@ fn cli_engine(output: Option<String>) -> std::sync::Arc<aon::engine::Engine> {
     use std::hash::{BuildHasher, RandomState};
     let id = RandomState::new().hash_one(std::time::Instant::now()) | 1;
     let name = gethostname::gethostname().to_string_lossy().into_owned();
-    let prefs = aon::engine::Prefs { reconnect: false, last_host: None, was_hosting: false, output, system_source: None, mic: None, quality: Default::default(), start_at_login: false, quiet_wifi: false, mute_speakers: false };
+    let prefs = aon::engine::Prefs { reconnect: false, output, ..Default::default() };
     aon::engine::Engine::new(id, name, prefs)
 }
 

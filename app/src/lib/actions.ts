@@ -1,7 +1,7 @@
 // User intents. In the Tauri app each one becomes a backend command; in the
 // browser design review they mutate the demo state so the UI stays clickable.
 
-import { app, inTauri, type Issue } from './state.svelte';
+import { app, inTauri, normalizeCode, type Issue } from './state.svelte';
 
 export type Section = 'devices' | 'audio' | 'network' | 'advanced' | 'about';
 
@@ -19,7 +19,35 @@ async function call(cmd: string, args?: Record<string, unknown>): Promise<boolea
 
 export const actions = {
   async becomeHost() {
-    if (!(await call('become_host'))) app.hosting = { output: app.devices.output, clients: [] };
+    if (!(await call('become_host'))) app.hosting = { name: app.me.name, code: null, output: app.devices.output, clients: [] };
+  },
+  /** Start listening as `name`, privately when `code` is set. */
+  async startListening(name: string, code: string | null) {
+    if (await call('start_listening', { name, code })) return;
+    app.hosting = { name: name.trim() || app.me.name, code, output: app.devices.output || app.devices.defaultOutput, clients: [] };
+  },
+  /** Make the running listener private with `code`, or public with null. */
+  async setPrivate(code: string | null) {
+    if (!(await call('set_private', { code })) && app.hosting) app.hosting.code = code;
+  },
+  /** Join the private listener showing `code`; the answer arrives in the state. */
+  async joinCode(code: string) {
+    app.joinError = null;
+    if (await call('join_code', { code })) return;
+    // Design review: "K7Q4MZ" is the one private listener in the demo.
+    app.joining = true;
+    setTimeout(() => {
+      app.joining = false;
+      if (normalizeCode(code) === 'K7Q4MZ') {
+        app.link = { host: { id: 'p1', name: 'Studio room', os: 'windows', clients: 1 }, status: 'connected', latencyMs: 21.4, send: { system: true, mic: false }, hear: { system: false, mic: false } };
+      } else {
+        app.joinError = "That code didn't work. Check it and try again.";
+      }
+    }, 900);
+  },
+  async cancelJoin() {
+    app.joinError = null;
+    if (!(await call('cancel_join'))) app.joining = false;
   },
   async handOver(clientId: string) {
     if (await call('hand_over', { clientId })) return;

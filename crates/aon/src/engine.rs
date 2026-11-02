@@ -7,7 +7,8 @@
 
 use crate::audio;
 use crate::discovery::{Advert, Discovery};
-use crate::net::{self, HubShared, Identity, SendConfig, SendShared};
+use crate::net::{self, HubShared, Identity, PrivateHub, SendConfig, SendShared};
+use crate::private::{self, Cipher, Pairing};
 use anyhow::{Result, anyhow};
 use aon_core::protocol::{self, DEFAULT_PORT, Os, Quality, Source};
 use serde::Serialize;
@@ -29,6 +30,25 @@ const WANT_EXPIRE: Duration = Duration::from_secs(3);
 /// one keeps announcing where everyone went (for senders that missed it).
 const HANDOVER_START: Duration = Duration::from_secs(8);
 const HANDOVER_ANNOUNCE: Duration = Duration::from_secs(10);
+/// Joining with a code: PairStart is resent this often until the listener
+/// answers, and the attempt gives up after JOIN_TIMEOUT.
+const JOIN_RESEND: Duration = Duration::from_millis(300);
+const JOIN_TIMEOUT: Duration = Duration::from_secs(3);
+/// How often a lost private link tries to pair again with the saved code.
+const REJOIN_EVERY: Duration = Duration::from_secs(4);
+
+/// Looking for the private listener that has a code.
+struct Join {
+    code: String,
+    /// Each private listener tried, by its hub address.
+    tries: HashMap<SocketAddr, (u64, Pairing)>,
+    started: Instant,
+    last_send: Option<Instant>,
+    /// Reconnecting with a saved code: no error shown if it fails.
+    quiet: bool,
+    /// Reconnecting: only this listener is tried.
+    only: Option<u64>,
+}
 
 /// This device is handing its listener role to `to`.
 struct Handover {
@@ -66,6 +86,9 @@ struct LinkRun {
     /// What we asked to hear from the host, and the local hub playing it.
     hear: Sends,
     back: Option<HostRun>,
+    /// Private session key shared with this listener.
+    cipher: Option<Arc<Cipher>>,
+    since: Instant,
 }
 
 #[derive(Clone, Copy)]
@@ -90,6 +113,43 @@ pub struct Prefs {
     pub quiet_wifi: bool,
     /// Silence this computer's speakers while it sends its system audio.
     pub mute_speakers: bool,
+    /// The name others see while this device listens; `None` uses the
+    /// device name.
+    pub listen_name: Option<String>,
+    /// Set while listening privately: the code audio senders type.
+    pub private_code: Option<String>,
+    /// The code of `last_host` when it is private, to rejoin without asking.
+    pub last_code: Option<String>,
+}
+
+impl Default for Prefs {
+    fn default() -> Self {
+        Self {
+            reconnect: true,
+            last_host: None,
+            was_hosting: false,
+            output: None,
+            system_source: None,
+            mic: None,
+            quality: Quality::default(),
+            start_at_login: false,
+            quiet_wifi: false,
+            mute_speakers: false,
+            listen_name: None,
+            private_code: None,
+            last_code: None,
+        }
+    }
+}
+
+/// What the shell persists between launches; compare to know when to save.
+#[derive(Clone, PartialEq, Debug)]
+pub struct Saved {
+    pub last_host: Option<u64>,
+    pub was_hosting: bool,
+    pub last_code: Option<String>,
+    pub listen_name: Option<String>,
+    pub private_code: Option<String>,
 }
 
 #[derive(Clone, Copy, Debug)]
@@ -117,6 +177,10 @@ pub struct Engine {
     handover: Mutex<Option<Handover>>,
     /// Why the last handover didn't happen; shown until the next one.
     handover_error: Mutex<Option<String>>,
+    join: Mutex<Option<Join>>,
+    /// Why the last join with a code failed; shown until the next try.
+    join_error: Mutex<Option<String>>,
+    last_rejoin: Mutex<Option<Instant>>,
 }
 
 // ---- snapshot: mirrors `AppState` in app/src/lib/state.svelte.ts ----
@@ -139,6 +203,9 @@ pub struct Snapshot {
     error: Option<String>,
     /// Name of the device this one is handing the listener role to.
     handing_over: Option<String>,
+    /// Looking for the listener that has the code the user typed.
+    joining: bool,
+    join_error: Option<String>,
 }
 
 #[derive(Serialize)]
@@ -149,6 +216,10 @@ struct Me {
 
 #[derive(Serialize)]
 struct Hosting {
+    /// The name audio senders see.
+    name: String,
+    /// Set when private: the code audio senders type to join.
+    code: Option<String>,
     output: String,
     clients: Vec<ClientRow>,
 }
@@ -260,6 +331,14 @@ impl Snapshot {
         parts.join(" | ")
     }
 
+    pub fn is_linked(&self) -> bool {
+        self.link.is_some()
+    }
+
+    pub fn join_failed(&self) -> Option<&str> {
+        if self.joining { None } else { self.join_error.as_deref() }
+    }
+
     /// Ids and names of the devices sending to this listener.
     pub fn client_ids(&self) -> Vec<(String, String)> {
         self.hosting.as_ref().map_or(Vec::new(), |h| h.clients.iter().map(|c| (c.id.clone(), c.name.clone())).collect())
@@ -320,6 +399,9 @@ impl Engine {
             perms: crate::permissions::Checker::start(),
             handover: Mutex::new(None),
             handover_error: Mutex::new(None),
+            join: Mutex::new(None),
+            join_error: Mutex::new(None),
+            last_rejoin: Mutex::new(None),
         })
     }
 
@@ -400,11 +482,64 @@ impl Engine {
 
     pub fn become_host(&self) -> Result<()> {
         self.prefs.lock().unwrap().was_hosting = true;
-        let mut host = self.host.lock().unwrap();
-        if host.is_none() {
-            *host = Some(self.spawn_hub(DEFAULT_PORT)?);
+        {
+            let mut host = self.host.lock().unwrap();
+            if host.is_none() {
+                *host = Some(self.spawn_hub(DEFAULT_PORT)?);
+            }
         }
+        self.apply_private();
         Ok(())
+    }
+
+    /// Start listening under `name` (`None`: the device name), privately when
+    /// `code` is set.
+    pub fn start_listening(&self, name: Option<String>, code: Option<String>) -> Result<()> {
+        let code = code.map(|c| private::normalize_code(&c).ok_or_else(|| anyhow!("A code has 6 letters and numbers."))).transpose()?;
+        {
+            let mut p = self.prefs.lock().unwrap();
+            p.listen_name = name.map(|n| n.trim().to_string()).filter(|n| !n.is_empty());
+            p.private_code = code;
+        }
+        self.become_host()
+    }
+
+    /// Make the running listener private with `code`, or public with `None`.
+    /// Audio senders without the code are dropped when it turns private.
+    pub fn set_private(&self, code: Option<String>) -> Result<()> {
+        let code = code.map(|c| private::normalize_code(&c).ok_or_else(|| anyhow!("A code has 6 letters and numbers."))).transpose()?;
+        if code.is_some() && self.handover.lock().unwrap().is_some() {
+            return Err(anyhow!("Wait for the handover to finish."));
+        }
+        self.prefs.lock().unwrap().private_code = code;
+        self.apply_private();
+        Ok(())
+    }
+
+    /// The name audio senders see while this device listens.
+    fn listen_name(&self) -> String {
+        self.prefs.lock().unwrap().listen_name.clone().unwrap_or_else(|| self.me.name.clone())
+    }
+
+    /// Tell the running hub whether it is private, and with which code.
+    fn apply_private(&self) {
+        let code = self.prefs.lock().unwrap().private_code.clone();
+        let session = code.map(|code| PrivateHub { code, name: self.listen_name() });
+        if let Some(h) = self.host.lock().unwrap().as_ref() {
+            *h.shared.private.lock().unwrap() = session;
+        }
+    }
+
+    /// What the shell saves between launches.
+    pub fn saved(&self) -> Saved {
+        let p = self.prefs.lock().unwrap();
+        Saved {
+            last_host: p.last_host,
+            was_hosting: p.was_hosting,
+            last_code: p.last_code.clone(),
+            listen_name: p.listen_name.clone(),
+            private_code: p.private_code.clone(),
+        }
     }
 
     /// Start a hub on `port` (0 = any) playing on the chosen output.
@@ -449,7 +584,7 @@ impl Engine {
         }
     }
 
-    fn start_send(&self, addr: SocketAddr, source: Source) -> SendRun {
+    fn start_send(&self, addr: SocketAddr, source: Source, cipher: Option<Arc<Cipher>>) -> SendRun {
         let shared = Arc::new(SendShared::default());
         let s = shared.clone();
         let who = self.me.clone();
@@ -470,7 +605,7 @@ impl Engine {
                 };
                 let run = || -> Result<()> {
                     let (_stream, cap, rate) = audio::start_capture(kind, device.as_deref(), mute)?;
-                    net::run_sender(SendConfig { hub: addr, who, source, quality, drop_percent: 0, verbose: false }, cap, rate, &s)
+                    net::run_sender(SendConfig { hub: addr, who, source, quality, drop_percent: 0, verbose: false, cipher }, cap, rate, &s)
                 };
                 if let Err(e) = run() {
                     eprintln!("sender {source:?}: {e}");
@@ -488,7 +623,21 @@ impl Engine {
     }
 
     pub fn connect(&self, host: u64) -> Result<()> {
-        let peer = self.disco.peers.lock().unwrap().get(&host).cloned().ok_or_else(|| anyhow!("That listener is no longer on the network."))?;
+        self.connect_with(host, None)
+    }
+
+    /// Connect to `host`; `private` is the name and key from pairing with a
+    /// private listener.
+    fn connect_with(&self, host: u64, private: Option<(String, Arc<Cipher>, String)>) -> Result<()> {
+        let mut peer = self.disco.peers.lock().unwrap().get(&host).cloned().ok_or_else(|| anyhow!("That listener is no longer on the network."))?;
+        let (cipher, code) = match private {
+            Some((name, cipher, code)) => {
+                peer.advert.name = name;
+                (Some(cipher), Some(code))
+            }
+            None if peer.advert.private => return Err(anyhow!("That listener is private. Join it with its code.")),
+            None => (None, None),
+        };
         if !peer.advert.hosting {
             return Err(anyhow!("{} stopped listening.", peer.advert.name));
         }
@@ -505,19 +654,23 @@ impl Engine {
             macos: peer.advert.macos,
             clients: peer.advert.clients,
             addr,
-            system: Some(self.start_send(addr, Source::System)),
-            mic: mic.then(|| self.start_send(addr, Source::Mic)),
+            system: Some(self.start_send(addr, Source::System, cipher.clone())),
+            mic: mic.then(|| self.start_send(addr, Source::Mic, cipher.clone())),
             hear: Sends::default(),
             back: None,
+            cipher,
+            since: Instant::now(),
         });
-        self.prefs.lock().unwrap().last_host = Some(host);
+        let mut p = self.prefs.lock().unwrap();
+        p.last_host = Some(host);
+        p.last_code = code;
         Ok(())
     }
 
     pub fn disconnect(&self) {
         if let Some(l) = self.link.lock().unwrap().take() {
             if l.hear.system || l.hear.mic {
-                self.send_want(l.addr, 0, Sends::default());
+                self.send_want(l.addr, 0, Sends::default(), l.cipher.as_deref());
             }
             Self::stop_send(l.system);
             Self::stop_send(l.mic);
@@ -527,9 +680,13 @@ impl Engine {
         }
     }
 
-    fn send_want(&self, host: SocketAddr, port: u16, hear: Sends) {
+    fn send_want(&self, host: SocketAddr, port: u16, hear: Sends, cipher: Option<&Cipher>) {
         let mut buf = Vec::new();
         protocol::encode_want(&mut buf, self.me.device, port, hear.system, hear.mic);
+        if let Some(c) = cipher {
+            let plain = std::mem::take(&mut buf);
+            c.seal(&plain, &mut buf);
+        }
         // Without Local Network access macOS drops every packet to the LAN,
         // but reports it ("no route to host", EHOSTUNREACH) only on the first
         // few sends; later ones look fine. So the flag stays set until the
@@ -554,10 +711,15 @@ impl Engine {
         }
         let any = l.hear.system || l.hear.mic;
         if any && l.back.is_none() {
-            l.back = Some(self.spawn_hub(0)?);
+            let back = self.spawn_hub(0)?;
+            // The listener's audio comes back sealed with the same key.
+            if let Some(c) = &l.cipher {
+                back.shared.keys.lock().unwrap().insert(l.addr.ip(), c.clone());
+            }
+            l.back = Some(back);
         }
         let port = l.back.as_ref().map_or(0, |b| b.shared.port.load(Relaxed));
-        self.send_want(l.addr, port, l.hear);
+        self.send_want(l.addr, port, l.hear, l.cipher.as_deref());
         if !any {
             if let Some(b) = l.back.take() {
                 Self::stop_hub(b);
@@ -592,7 +754,8 @@ impl Engine {
             if !h.returns.contains_key(&key) {
                 let (ip, _, port, mic) = key;
                 let source = if mic { Source::Mic } else { Source::System };
-                h.returns.insert(key, self.start_send(SocketAddr::new(ip, port), source));
+                let cipher = h.shared.keys.lock().unwrap().get(&ip).cloned();
+                h.returns.insert(key, self.start_send(SocketAddr::new(ip, port), source, cipher));
             }
         }
     }
@@ -610,6 +773,9 @@ impl Engine {
             .is_some_and(|h| h.shared.streams.lock().unwrap().iter().any(|s| s.who.as_ref().is_some_and(|(w, _)| w.device == client)));
         if !sending_here {
             return Err(anyhow!("{} isn't sending to this device.", peer.advert.name));
+        }
+        if self.prefs.lock().unwrap().private_code.is_some() {
+            return Err(anyhow!("A private listener can't hand over yet. Make it public first."));
         }
         *self.handover_error.lock().unwrap() = None;
         *self.handover.lock().unwrap() = Some(Handover { to: client, name: peer.advert.name, since: Instant::now(), moved: None });
@@ -666,7 +832,13 @@ impl Engine {
         if to == self.me.device {
             // We are the new listener. Our audio plays here from now on.
             self.disconnect();
-            self.prefs.lock().unwrap().last_host = None;
+            {
+                // The old listener was public, and so is this one.
+                let mut p = self.prefs.lock().unwrap();
+                p.last_host = None;
+                p.private_code = None;
+                p.listen_name = None;
+            }
             if let Err(e) = self.become_host() {
                 eprintln!("handover: {e}");
             }
@@ -684,7 +856,7 @@ impl Engine {
             let Some(l) = link.as_mut() else { return };
             let hearing = l.hear.system || l.hear.mic;
             if hearing {
-                self.send_want(l.addr, 0, Sends::default());
+                self.send_want(l.addr, 0, Sends::default(), None);
             }
             for r in [l.system.as_ref(), l.mic.as_ref()].into_iter().flatten() {
                 *r.shared.retarget.lock().unwrap() = Some(addr);
@@ -696,7 +868,7 @@ impl Engine {
             l.addr = addr;
             if hearing {
                 let port = l.back.as_ref().map_or(0, |b| b.shared.port.load(Relaxed));
-                self.send_want(addr, port, l.hear);
+                self.send_want(addr, port, l.hear, None);
             }
         }
         self.prefs.lock().unwrap().last_host = Some(to);
@@ -706,8 +878,86 @@ impl Engine {
     /// Forget first: disconnecting takes a moment (senders wind down), and a
     /// tick in between would otherwise reconnect straight away.
     pub fn forget_host(&self) {
-        self.prefs.lock().unwrap().last_host = None;
+        {
+            let mut p = self.prefs.lock().unwrap();
+            p.last_host = None;
+            p.last_code = None;
+        }
         self.disconnect();
+    }
+
+    /// Join the private listener that shows `code`. The answer arrives over
+    /// the next ticks: a link, or `join_error`.
+    pub fn join_code(&self, code: &str) -> Result<()> {
+        let code = private::normalize_code(code).ok_or_else(|| anyhow!("A code has 6 letters and numbers."))?;
+        *self.join_error.lock().unwrap() = None;
+        *self.join.lock().unwrap() = Some(Join { code, tries: HashMap::new(), started: Instant::now(), last_send: None, quiet: false, only: None });
+        Ok(())
+    }
+
+    pub fn cancel_join(&self) {
+        *self.join.lock().unwrap() = None;
+        *self.join_error.lock().unwrap() = None;
+    }
+
+    /// Pair again with the saved code (the listener restarted, or Aonin did).
+    fn rejoin(&self, host: u64, code: String) {
+        let mut last = self.last_rejoin.lock().unwrap();
+        if last.is_some_and(|t| t.elapsed() < REJOIN_EVERY) || self.join.lock().unwrap().is_some() {
+            return;
+        }
+        *last = Some(Instant::now());
+        *self.join.lock().unwrap() = Some(Join { code, tries: HashMap::new(), started: Instant::now(), last_send: None, quiet: true, only: Some(host) });
+    }
+
+    /// Send PairStart to every private listener in view until one answers.
+    fn drive_join(&self, peers: &[crate::discovery::Peer]) {
+        let sources = self.my_sources();
+        let mut guard = self.join.lock().unwrap();
+        let Some(j) = guard.as_mut() else { return };
+        let all_wrong = !j.tries.is_empty() && j.tries.values().all(|(_, p)| p.answered());
+        if j.started.elapsed() > JOIN_TIMEOUT || all_wrong {
+            let quiet = j.quiet;
+            *guard = None;
+            if !quiet {
+                let msg = if all_wrong { "That code didn't work. Check it and try again." } else { "No listener has that code. Check it and try again." };
+                *self.join_error.lock().unwrap() = Some(msg.into());
+            }
+            return;
+        }
+        for p in peers {
+            let a = &p.advert;
+            if a.hosting && a.private && j.only.is_none_or(|o| o == a.id) && !sources.contains(&a.id) {
+                let code = &j.code;
+                j.tries.entry(SocketAddr::new(p.ip, a.port)).or_insert_with(|| (a.id, Pairing::new(code)));
+            }
+        }
+        if j.last_send.is_none_or(|t| t.elapsed() >= JOIN_RESEND) {
+            for (addr, (_, p)) in &j.tries {
+                if !p.answered() {
+                    let _ = self.ctrl.send_to(&p.start, addr);
+                }
+            }
+            j.last_send = Some(Instant::now());
+        }
+    }
+
+    /// A listener answered our PairStart: connect if the code was right.
+    fn on_pair_reply(&self, data: &[u8], from: SocketAddr) {
+        let paired = {
+            let mut guard = self.join.lock().unwrap();
+            let Some(j) = guard.as_mut() else { return };
+            let Some((id, p)) = j.tries.get_mut(&from) else { return };
+            let id = *id;
+            let Some((cipher, name)) = p.finish(data) else { return };
+            let code = j.code.clone();
+            *guard = None;
+            (id, name, cipher, code)
+        };
+        let (id, name, cipher, code) = paired;
+        if let Err(e) = self.connect_with(id, Some((name, Arc::new(cipher), code))) {
+            *self.join_error.lock().unwrap() = Some(e.to_string());
+        }
     }
 
     pub fn set_send(&self, source: Source, on: bool) {
@@ -721,7 +971,7 @@ impl Engine {
             Source::Mic => &mut l.mic,
         };
         if on && slot.is_none() {
-            *slot = Some(self.start_send(l.addr, source));
+            *slot = Some(self.start_send(l.addr, source, l.cipher.clone()));
         } else if !on {
             Self::stop_send(slot.take());
         }
@@ -769,6 +1019,7 @@ impl Engine {
         if let Some(h) = self.host.lock().unwrap().as_mut() {
             self.serve_returns(h);
         }
+        let (listen_name, code) = (self.listen_name(), self.prefs.lock().unwrap().private_code.clone());
         let hosting = {
             let host = self.host.lock().unwrap();
             host.as_ref().map(|h| {
@@ -815,7 +1066,7 @@ impl Engine {
                         row
                     })
                     .collect::<Vec<_>>();
-                Hosting { output: if playing.is_empty() { "no output".into() } else { playing }, clients }
+                Hosting { name: listen_name.clone(), code: code.clone(), output: if playing.is_empty() { "no output".into() } else { playing }, clients }
             })
         };
 
@@ -823,6 +1074,10 @@ impl Engine {
         {
             let mut me = self.disco.me.lock().unwrap();
             me.hosting = hosting.is_some();
+            // A private listener leaves its name out: only devices with the
+            // code learn it, and 0.1.x devices skip a beacon without one.
+            me.private = me.hosting && code.is_some();
+            me.name = if me.private { String::new() } else if me.hosting { listen_name.clone() } else { self.me.name.clone() };
             me.clients = hosting.as_ref().map_or(0, |h| h.clients.len() as u32);
             me.sources = sources.iter().copied().collect();
         }
@@ -834,7 +1089,7 @@ impl Engine {
             clients: p.advert.clients,
             blocked: sources.contains(&p.advert.id).then(|| "Joining would play your own audio back to you.".to_string()),
         };
-        let hosts: Vec<HostInfo> = peers.iter().filter(|p| p.advert.hosting).map(host_info).collect();
+        let hosts: Vec<HostInfo> = peers.iter().filter(|p| p.advert.hosting && !p.advert.private).map(host_info).collect();
 
         self.follow_handover(&peers);
         if let Some(e) = self.handover_error.lock().unwrap().clone() {
@@ -842,20 +1097,36 @@ impl Engine {
         }
         let handing_over = self.handover.lock().unwrap().as_ref().filter(|h| h.moved.is_none()).map(|h| h.name.clone());
 
-        // Reconnect to the last host as soon as it shows up.
-        let (reconnect, last) = {
+        // Reconnect to the last host as soon as it shows up. A private one
+        // is paired again with its saved code.
+        let (reconnect, last, last_code) = {
             let p = self.prefs.lock().unwrap();
-            (p.reconnect, p.last_host)
+            (p.reconnect, p.last_host, p.last_code.clone())
         };
         if reconnect && self.link.lock().unwrap().is_none() {
             if let Some(h) = last.filter(|h| hosts.iter().any(|x| x.id == id_str(*h) && x.blocked.is_none())) {
                 let _ = self.connect(h);
+            } else if let (Some(h), Some(code)) = (last, last_code.clone())
+                && peers.iter().any(|p| p.advert.id == h && p.advert.hosting && p.advert.private && !sources.contains(&h))
+            {
+                self.rejoin(h, code);
             }
         }
 
-        let mut buf = [0u8; 256];
-        while let Ok((n, _)) = self.ctrl.recv_from(&mut buf) {
-            if let Some(protocol::Packet::Status { .. }) = protocol::decode(&buf[..n]) {
+        self.drive_join(&peers);
+        let mut buf = [0u8; 512];
+        while let Ok((n, from)) = self.ctrl.recv_from(&mut buf) {
+            let data = &buf[..n];
+            if private::is_pair_reply(data) {
+                self.on_pair_reply(data, from);
+                continue;
+            }
+            let cipher = self.link.lock().unwrap().as_ref().and_then(|l| l.cipher.clone());
+            let plain = match &cipher {
+                Some(c) => c.open(data),
+                None => Some(data.to_vec()),
+            };
+            if let Some(protocol::Packet::Status { .. }) = plain.as_deref().and_then(protocol::decode) {
                 *self.last_ack.lock().unwrap() = Some(Instant::now());
                 self.local_net_blocked.store(false, Relaxed);
             }
@@ -864,10 +1135,11 @@ impl Engine {
             let mut last = self.last_want.lock().unwrap();
             if last.elapsed() >= WANT_EVERY {
                 let port = l.back.as_ref().map_or(0, |b| b.shared.port.load(Relaxed));
-                self.send_want(l.addr, port, l.hear);
+                self.send_want(l.addr, port, l.hear, l.cipher.as_deref());
                 *last = Instant::now();
             }
         }
+        let mut lost_private: Option<u64> = None;
         let link = self.link.lock().unwrap().as_ref().map(|l| {
             let runs = [l.system.as_ref(), l.mic.as_ref()];
             let acked = self.last_ack.lock().unwrap().is_some_and(|t| t.elapsed() < Duration::from_millis(LINK_TIMEOUT_MS as u64));
@@ -876,6 +1148,9 @@ impl Engine {
                     let last = r.shared.last_status_ms.load(Relaxed);
                     last > 0 && (r.started.elapsed().as_millis() as u32).saturating_sub(last) < LINK_TIMEOUT_MS
                 });
+            if !alive && l.cipher.is_some() && l.since.elapsed() > Duration::from_millis(LINK_TIMEOUT_MS as u64) {
+                lost_private = Some(l.host);
+            }
             let latency = runs.iter().flatten().map(|r| r.shared.buffer_ms.get()).fold(0.0, f32::max);
             let fresh = peers.iter().find(|p| p.advert.id == l.host);
             let send_level = runs.iter().flatten().map(|r| meter(r.shared.peak.take())).fold(0.0, f32::max);
@@ -900,6 +1175,13 @@ impl Engine {
                 hear_latency_ms,
             }
         });
+
+        // A private listener that restarted has forgotten our key: pair again.
+        if let (Some(h), Some(code)) = (lost_private, last_code) {
+            self.rejoin(h, code);
+        }
+        let joining = self.join.lock().unwrap().as_ref().is_some_and(|j| !j.quiet);
+        let join_error = self.join_error.lock().unwrap().clone();
 
         // Only raise what matters for what this device is doing right now.
         let found = self.perms.get();
@@ -948,6 +1230,8 @@ impl Engine {
             options: Options { reconnect, start_at_login, quiet_wifi, mute_speakers },
             error,
             handing_over,
+            joining,
+            join_error,
         }
     }
 
@@ -974,18 +1258,7 @@ mod tests {
     /// Become host is remembered, quitting keeps it, only Stop forgets it.
     #[test]
     fn host_role_is_remembered_until_stop() {
-        let prefs = Prefs {
-            reconnect: false,
-            last_host: None,
-            was_hosting: false,
-            output: None,
-            system_source: None,
-            mic: None,
-            quality: Quality::Highest,
-            start_at_login: false,
-            quiet_wifi: false,
-            mute_speakers: false,
-        };
+        let prefs = Prefs { reconnect: false, quality: Quality::Highest, ..Default::default() };
         let engine = Engine::new(2, "test".into(), prefs);
         engine.become_host().unwrap();
         assert!(engine.was_hosting());
@@ -1001,18 +1274,7 @@ mod tests {
     fn tick_returns_and_never_deadlocks() {
         let (tx, rx) = mpsc::channel();
         std::thread::spawn(move || {
-            let prefs = Prefs {
-                reconnect: true,
-                last_host: None,
-                was_hosting: false,
-                output: None,
-                system_source: None,
-                mic: None,
-                quality: Quality::Cd,
-                start_at_login: true,
-                quiet_wifi: false,
-                mute_speakers: false,
-            };
+            let prefs = Prefs { quality: Quality::Cd, start_at_login: true, ..Default::default() };
             let engine = Engine::new(1, "test".into(), prefs);
             let snaps: Vec<String> = (0..3).map(|_| engine.tick().quality.to_string()).collect();
             engine.shutdown();

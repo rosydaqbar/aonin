@@ -60,7 +60,8 @@ export interface AppState {
   me: { name: string; os: Os };
   /** What the OS is stopping Aonin from doing; each shows with its fix. */
   issues: Issue[];
-  hosting: null | { output: string; clients: ClientRow[] };
+  /** `name`: what audio senders see. `code`: set when private. */
+  hosting: null | { name: string; code: string | null; output: string; clients: ClientRow[] };
   link: null | Link;
   hosts: HostInfo[];
   quality: Quality;
@@ -76,6 +77,29 @@ export interface AppState {
   update: string | null;
   /** Name of the device this listener is handing its role to. */
   handingOver: string | null;
+  /** Looking for the private listener with the code the user typed. */
+  joining: boolean;
+  joinError: string | null;
+}
+
+/** No 0/O or 1/I: a code is read off one screen and typed on another.
+ *  Matches `CODE_ALPHABET` in crates/aon/src/private.rs. */
+const CODE_ALPHABET = 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789';
+
+export function newCode(): string {
+  const bytes = crypto.getRandomValues(new Uint8Array(6));
+  return Array.from(bytes, (b) => CODE_ALPHABET[b % CODE_ALPHABET.length]).join('');
+}
+
+/** The code as typed ("k7q 4mz") in canonical form, or null. */
+export function normalizeCode(typed: string): string | null {
+  const c = typed.replace(/[\s-]/g, '').toUpperCase();
+  return c.length === 6 && [...c].every((ch) => CODE_ALPHABET.includes(ch)) ? c : null;
+}
+
+/** 'K7Q4MZ' reads as "K7Q 4MZ". */
+export function fmtCode(code: string): string {
+  return `${code.slice(0, 3)} ${code.slice(3)}`;
 }
 
 export const QUALITY: Record<Quality, { label: string; detail: string; rate: string }> = {
@@ -94,6 +118,8 @@ const base: AppState = {
   link: null,
   hosts: [],
   handingOver: null,
+  joining: false,
+  joinError: null,
   quality: 'highest',
   outputLost: false,
   stats: [],
@@ -121,7 +147,7 @@ const pcStudio: HostInfo = { id: 'h1', name: 'PC-Studio', os: 'windows', clients
 
 export const DEMOS: Record<string, Partial<AppState>> = {
   host: {
-    hosting: { output: 'USB DAC', clients },
+    hosting: { name: 'PC-Studio', code: null, output: 'USB DAC', clients },
     hosts: [{ id: 'h2', name: 'Studio iMac', os: 'macos', clients: 1, blocked: 'Joining would play your own audio back to you.' }],
     stats: [
       { name: "Studio MacBook Pro", bufferMs: 21.8, targetMs: 20, recovered: 4, concealed: 0, dropouts: 0 },
@@ -129,7 +155,8 @@ export const DEMOS: Record<string, Partial<AppState>> = {
       { name: 'Work Laptop', bufferMs: 18.0, targetMs: 18, recovered: 0, concealed: 0, dropouts: 0 },
     ],
   },
-  waiting: { hosting: { output: 'USB DAC', clients: [] } },
+  private: { hosting: { name: 'Studio room', code: 'K7Q4MZ', output: 'USB DAC', clients: clients.slice(0, 2) } },
+  waiting: { hosting: { name: 'PC-Studio', code: null, output: 'USB DAC', clients: [] } },
   client: {
     update: '0.1.2',
     me: { name: 'Office MacBook', os: 'macos' },
@@ -139,7 +166,7 @@ export const DEMOS: Record<string, Partial<AppState>> = {
   },
   both: {
     me: { name: 'Office MacBook', os: 'macos' },
-    hosting: { output: 'MacBook Pro Speakers', clients: [clients[2]] },
+    hosting: { name: 'PC-Studio', code: null, output: 'MacBook Pro Speakers', clients: [clients[2]] },
     link: { host: pcStudio, status: 'connected', latencyMs: 24.1, send: { system: true, mic: false }, hear: { system: false, mic: false } },
     hosts: [pcStudio],
   },
@@ -154,16 +181,20 @@ export const DEMOS: Record<string, Partial<AppState>> = {
   },
   empty: { me: { name: 'Work Laptop', os: 'windows' } },
   issues: { me: { name: 'Office MacBook', os: 'macos' }, issues: ['localNetwork', 'audioCapture'] },
-  firewall: { hosting: { output: 'USB DAC', clients: [] }, issues: ['firewall'] },
+  firewall: { hosting: { name: 'PC-Studio', code: null, output: 'USB DAC', clients: [] }, issues: ['firewall'] },
   degraded: {
     hosting: {
+      name: 'PC-Studio',
+      code: null,
       output: 'USB DAC',
       clients: [clients[0], { ...clients[1], mark: 'degraded', latencyMs: 68.4, recovered: 41 }],
     },
   },
-  lost: { hosting: { output: 'USB DAC', clients: clients.slice(0, 2) }, outputLost: true },
+  lost: { hosting: { name: 'PC-Studio', code: null, output: 'USB DAC', clients: clients.slice(0, 2) }, outputLost: true },
   crowded: {
     hosting: {
+      name: 'PC-Studio',
+      code: null,
       output: 'USB DAC',
       clients: [
         ...clients,

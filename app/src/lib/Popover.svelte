@@ -3,8 +3,10 @@
   import { ChevronDown, ChevronRight, Globe, Info, Lock, Mic, MicOff, Monitor, Power } from '@lucide/svelte';
   import ClientRow from './ClientRow.svelte';
   import Grille from './Grille.svelte';
+  import JoinForm from './JoinForm.svelte';
+  import ListenForm from './ListenForm.svelte';
   import StatusMark from './StatusMark.svelte';
-  import { app, fmtMs, QUALITY, roleLine } from './state.svelte';
+  import { app, fmtCode, fmtMs, newCode, QUALITY, roleLine } from './state.svelte';
   import { actions } from './actions';
 
   let dot = $derived(
@@ -14,15 +16,26 @@
     : 'var(--strip-ink-2)'
   );
   let idle = $derived(!app.hosting && !app.link);
-  // "Make private" isn't built yet: say so inline for a few seconds.
-  let soon = $state(false);
   /** The audio sender whose "Make listener" is waiting for confirmation. */
   let confirmId = $state<string | null>(null);
-  let soonTimer: ReturnType<typeof setTimeout> | undefined;
-  function showSoon() {
-    soon = true;
-    clearTimeout(soonTimer);
-    soonTimer = setTimeout(() => (soon = false), 4000);
+  /** Idle: the Become listener or Join form, open in place of the list. */
+  let form = $state<'listen' | 'join' | null>(null);
+  $effect(() => {
+    if (!idle) form = null;
+  });
+  /** Turning private drops audio senders without the code: ask first. */
+  let confirmPrivate = $state(false);
+  function makePrivate() {
+    if (app.hosting?.clients.length) confirmPrivate = true;
+    else actions.setPrivate(newCode());
+  }
+  let copied = $state(false);
+  async function copyCode(code: string) {
+    try {
+      await navigator.clipboard.writeText(code);
+      copied = true;
+      setTimeout(() => (copied = false), 1500);
+    } catch {}
   }
 
   // Send/Hear stay folded away until asked for; the choice is remembered here.
@@ -51,14 +64,26 @@
 
 <div class="pop">
   <header class="strip">
-    <span class="me" title={app.me.name}>{app.me.name}</span>
+    <span class="me" title={app.hosting?.name ?? app.me.name}>{app.hosting?.name ?? app.me.name}</span>
     <span class="role"><i style:background={dot}></i>{roleLine(app, true)}</span>
     {#if app.hosting}
       <button class="stop" onclick={actions.stopHosting}>{app.link ? 'Stop listening' : 'Stop'}</button>
     {/if}
   </header>
 
-  {#if app.hosting}
+  {#if app.hosting?.code}
+    {@const code = app.hosting.code}
+    <div class="vis">
+      <Lock size={14} strokeWidth={1.75} aria-hidden="true" />
+      <span>Private</span>
+      <span class="tip">
+        <button class="info" aria-label="What private means" aria-describedby="vis-tip"><Info size={13} strokeWidth={1.75} /></button>
+        <span class="bubble" role="tooltip" id="vis-tip">Only devices with this code can join. Audio senders type it under Join.</span>
+      </span>
+      <button class="codechip code" onclick={() => copyCode(code)} title="Copy code" aria-label="Copy code {code.split('').join(' ')}">{copied ? 'Copied' : fmtCode(code)}</button>
+      <button class="btn quiet make" onclick={() => actions.setPrivate(null)}><Globe size={13} strokeWidth={1.75} />Make public</button>
+    </div>
+  {:else if app.hosting}
     <div class="vis">
       <Globe size={14} strokeWidth={1.75} aria-hidden="true" />
       <span>Visible to public</span>
@@ -66,9 +91,17 @@
         <button class="info" aria-label="What visible to public means" aria-describedby="vis-tip"><Info size={13} strokeWidth={1.75} /></button>
         <span class="bubble" role="tooltip" id="vis-tip">Anyone on this network can join.</span>
       </span>
-      <button class="btn quiet make" onclick={showSoon}><Lock size={13} strokeWidth={1.75} />Make private</button>
+      <button class="btn quiet make" onclick={makePrivate}><Lock size={13} strokeWidth={1.75} />Make private</button>
     </div>
-    {#if soon}<p class="soon" role="status">Private mode is coming soon.</p>{/if}
+    {#if confirmPrivate}
+      <div class="confirm pad" role="group" aria-label="Make private">
+        <p>Audio senders will need the code to stay connected.</p>
+        <span class="actions">
+          <button class="btn quiet" onclick={() => (confirmPrivate = false)}>Cancel</button>
+          <button class="btn primary" onclick={() => { confirmPrivate = false; actions.setPrivate(newCode()); }}>Make private</button>
+        </span>
+      </div>
+    {/if}
   {/if}
 
   {#if app.error}
@@ -84,10 +117,22 @@
 
   <Issues compact />
 
-  {#if idle && app.hosts.length === 0}
+  {#if idle && form}
+    <section class="formbox">
+      {#if form === 'listen'}
+        <ListenForm oncancel={() => (form = null)} />
+      {:else}
+        <JoinForm oncancel={() => (form = null)} />
+      {/if}
+    </section>
+  {:else if idle && app.hosts.length === 0}
     <section class="solo">
       <p>No listener on this network yet.</p>
-      <button class="btn primary" onclick={actions.becomeHost}>Become listener</button>
+      <span class="pair">
+        <button class="btn primary" onclick={() => (form = 'listen')}>Become listener</button>
+        <button class="btn" onclick={() => (form = 'join')}>Join</button>
+      </span>
+      <p class="label">Joining a private listener? Use Join and type its code.</p>
     </section>
   {/if}
 
@@ -132,7 +177,7 @@
         <span class="label" title="Output">{app.outputLost ? 'No output' : `To ${app.hosting.output}`}</span>
       </div>
       {#each app.hosting.clients as row (row.id)}
-        <ClientRow {row} lost={app.outputLost} onmake={app.handingOver ? undefined : () => (confirmId = confirmId === row.id ? null : row.id)} />
+        <ClientRow {row} lost={app.outputLost} onmake={app.handingOver || app.hosting.code ? undefined : () => (confirmId = confirmId === row.id ? null : row.id)} />
         {#if confirmId === row.id}
           <div class="confirm" role="group" aria-label="Make {row.name} the listener">
             <p>Play everyone's audio on {row.name}? This device will send its audio there.</p>
@@ -143,12 +188,12 @@
           </div>
         {/if}
       {:else}
-        <p class="wait">Waiting for audio senders. Open Aonin on another device on this network.</p>
+        <p class="wait">{app.hosting.code ? "Waiting for audio senders. On another device, open Aonin, choose Join and type the code." : "Waiting for audio senders. Open Aonin on another device on this network."}</p>
       {/each}
     </section>
   {/if}
 
-  {#if idle && app.hosts.length > 0}
+  {#if idle && !form && app.hosts.length > 0}
     <section class="block">
       <div class="head"><span class="label">Listeners on this network</span></div>
       {#each app.hosts as h (h.id)}
@@ -163,7 +208,10 @@
           {/if}
         </div>
       {/each}
-      <button class="btn quiet also" onclick={actions.becomeHost}>Or become the listener instead</button>
+      <span class="alts">
+        <button class="btn quiet" onclick={() => (form = 'listen')}>Become listener</button>
+        <button class="btn quiet" onclick={() => (form = 'join')}>Join with code</button>
+      </span>
     </section>
   {/if}
 
@@ -258,7 +306,20 @@
   .confirm { padding: 10px 0 12px; border-bottom: 1px solid var(--line); }
   .confirm p { font-size: var(--size-s); line-height: 1.45; }
   .confirm .actions { display: flex; justify-content: flex-end; gap: 6px; margin-top: 8px; }
-  .soon { padding: 8px 16px; border-bottom: 1px solid var(--line); background: var(--recess); font-size: var(--size-s); }
+  .confirm.pad { padding: 10px 16px 12px; background: var(--recess); }
+  .codechip {
+    height: 24px;
+    padding: 0 8px;
+    border-radius: 6px;
+    border: 1px solid var(--line-strong);
+    background: var(--raised);
+    color: var(--ink);
+    font-size: 12px;
+    min-width: 76px;
+  }
+  .codechip:hover { border-color: var(--ink-2); }
+  .formbox { padding: 16px 16px 12px; }
+  .pair { display: flex; gap: 8px; }
   .make { margin-left: auto; display: inline-flex; align-items: center; gap: 6px; }
   .alert { margin: 12px 16px 0; padding: 9px 12px; border-radius: 8px; background: var(--red-wash); color: var(--ink); }
   .alert.lost { display: flex; flex-direction: column; align-items: flex-start; gap: 8px; }
@@ -266,6 +327,7 @@
   .quality:hover { color: var(--ink); }
   .solo { padding: 28px 16px 26px; display: flex; flex-direction: column; align-items: flex-start; gap: 14px; }
   .solo p { font-weight: 600; }
+  .solo p.label { font-weight: 400; }
   .block { padding: 14px 16px 4px; }
   .block + .block { padding-top: 18px; }
   .head { display: flex; justify-content: space-between; gap: 12px; margin-bottom: 2px; }
@@ -318,7 +380,7 @@
   .who { display: flex; flex-direction: column; min-width: 0; }
   .who .name { font-weight: 600; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
   .blocked .label { color: var(--red); }
-  .also { margin: 8px 0 6px -14px; }
+  .alts { display: flex; gap: 2px; margin: 8px 0 6px -14px; }
   footer {
     margin-top: 10px;
     display: flex;

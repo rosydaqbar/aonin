@@ -3,6 +3,7 @@
 
 use anyhow::Result;
 use crate::audio;
+use crate::private::{self, Cipher};
 use aon_core::playout::{self, StreamStats};
 use aon_core::protocol::{self, BLOCK_SAMPLES, Block, Codec, MAX_PACKET_BYTES, OPUS_FRAME_BLOCKS, OPUS_FRAME_FRAMES, Os, Packet, Quality, SAMPLE_RATE, Source};
 use aon_core::resample::Resampler;
@@ -84,6 +85,33 @@ struct Outgoing {
     /// Test aid: randomly drop this percentage of outgoing audio packets.
     drop_percent: u32,
     rng: u32,
+    /// Private session: every packet both ways is sealed with this key.
+    cipher: Option<Arc<Cipher>>,
+    sealed: Vec<u8>,
+}
+
+/// Send `plain`, sealed first when the session is private.
+fn tx(sock: &UdpSocket, to: Option<SocketAddr>, cipher: Option<&Cipher>, plain: &[u8], scratch: &mut Vec<u8>) {
+    let bytes = match cipher {
+        Some(c) => {
+            c.seal(plain, scratch);
+            &scratch[..]
+        }
+        None => plain,
+    };
+    let _ = match to {
+        Some(addr) => sock.send_to(bytes, addr),
+        None => sock.send(bytes),
+    };
+}
+
+/// The plain packet in `data`: opened with `cipher` in a private session
+/// (`None` if it isn't sealed with it), as is otherwise.
+fn plain(data: &[u8], cipher: Option<&Cipher>) -> Option<Vec<u8>> {
+    match cipher {
+        Some(c) => c.open(data),
+        None => Some(data.to_vec()),
+    }
 }
 
 impl Outgoing {
@@ -143,7 +171,7 @@ impl Outgoing {
         self.rng ^= self.rng >> 17;
         self.rng ^= self.rng << 5;
         if self.rng % 100 >= self.drop_percent {
-            let _ = self.sock.send(&self.buf);
+            tx(&self.sock, None, self.cipher.as_deref(), &self.buf, &mut self.sealed);
         }
     }
 
@@ -151,7 +179,8 @@ impl Outgoing {
     fn serve(&mut self, shared: &SendShared, started: Instant) {
         let mut inbuf = [0u8; 2048];
         while let Ok(n) = self.sock.recv(&mut inbuf) {
-            match protocol::decode(&inbuf[..n]) {
+            let Some(data) = plain(&inbuf[..n], self.cipher.as_deref()) else { continue };
+            match protocol::decode(&data) {
                 Some(Packet::Nack { stream, seqs }) if stream == self.stream && self.opus.is_some() => {
                     // Resend each frame that covers a missing block, once.
                     let mut firsts: Vec<u32> = Vec::new();
@@ -197,6 +226,8 @@ pub struct SendConfig {
     pub drop_percent: u32,
     /// Print stats to stdout (CLI).
     pub verbose: bool,
+    /// Private session key shared with the hub; `None` sends in the clear.
+    pub cipher: Option<Arc<Cipher>>,
 }
 
 pub fn run_sender(cfg: SendConfig, mut cap: Consumer<f32>, dev_rate: u32, shared: &SendShared) -> Result<()> {
@@ -230,6 +261,8 @@ pub fn run_sender(cfg: SendConfig, mut cap: Consumer<f32>, dev_rate: u32, shared
         retransmitted: 0,
         drop_percent: cfg.drop_percent,
         rng: stream | 1,
+        cipher: cfg.cipher.clone(),
+        sealed: Vec::with_capacity(MAX_PACKET_BYTES + private::OVERHEAD),
     };
     let mut hello = Vec::new();
     protocol::encode_hello(&mut hello, stream, cfg.who.device, cfg.source, cfg.who.os, &cfg.who.name);
@@ -284,7 +317,7 @@ pub fn run_sender(cfg: SendConfig, mut cap: Consumer<f32>, dev_rate: u32, shared
             }
         }
         if now - last_hello >= HELLO_EVERY {
-            let _ = net.sock.send(&hello);
+            tx(&net.sock, None, net.cipher.as_deref(), &hello, &mut net.sealed);
             last_hello = now;
         }
         if progressed {
@@ -342,7 +375,23 @@ pub struct HubShared {
     pub port: AtomicU16,
     /// Clients asking to hear this device, by (address, device id).
     pub wants: Mutex<HashMap<(IpAddr, u64), Want>>,
+    /// Private session keys by device address: what arrives sealed from an
+    /// address is opened with its key, and answered sealed with it.
+    pub keys: Mutex<HashMap<IpAddr, Arc<Cipher>>>,
+    /// Set while private: the code and the name shown to devices that pair.
+    /// Plain packets are then refused.
+    pub private: Mutex<Option<PrivateHub>>,
 }
+
+#[derive(Clone)]
+pub struct PrivateHub {
+    pub code: String,
+    pub name: String,
+}
+
+/// Pairing attempts one address may make per minute. The code has 30 bits,
+/// so guessing it this way would take thousands of years.
+const PAIR_TRIES_PER_MINUTE: u32 = 10;
 
 /// A client's standing request to have this host's audio streamed back.
 #[derive(Clone, Copy, Debug)]
@@ -366,6 +415,8 @@ struct Incoming {
     gap_env: f64,
     /// Longest gap since the last report, in seconds.
     worst_gap: f64,
+    /// Private session: replies to this stream are sealed with its key.
+    key: Option<Arc<Cipher>>,
 }
 
 /// How fast a past Wi-Fi stall stops holding the buffer up.
@@ -421,6 +472,9 @@ pub fn run_hub(
     let mut sources: HashMap<(SocketAddr, u32), Incoming> = HashMap::new();
     let mut buf = [0u8; 2048];
     let mut out = Vec::new();
+    let mut sealed = Vec::new();
+    let mut pair_tries: HashMap<IpAddr, (Instant, u32)> = HashMap::new();
+    let mut answered: HashMap<IpAddr, (Vec<u8>, Vec<u8>)> = HashMap::new();
     let mut report = Instant::now();
     let mut publish = Instant::now();
     let mut status = Instant::now();
@@ -434,7 +488,7 @@ pub fn run_hub(
                 println!("+ {addr} joined (stream {stream:08x})");
             }
             let (writer, _, stats) = playout::stream(SAMPLE_RATE);
-            let mut src = Incoming { opus: None, writer, stats, who: None, last_seen: Instant::now(), peak: 0.0, gap_env: 0.0, worst_gap: 0.0 };
+            let mut src = Incoming { opus: None, writer, stats, who: None, last_seen: Instant::now(), peak: 0.0, gap_env: 0.0, worst_gap: 0.0, key: None };
             attach(&mut src, output);
             src
         });
@@ -471,11 +525,56 @@ pub fn run_hub(
             }
         }
 
-        if let Ok((n, addr)) = sock.recv_from(&mut buf) {
-            match protocol::decode(&buf[..n]) {
+        // What arrived, opened if sealed, with the key to answer it with.
+        let got = match sock.recv_from(&mut buf) {
+            Ok((n, addr)) => {
+                let raw = &buf[..n];
+                if private::is_sealed(raw) {
+                    let key = shared.keys.lock().unwrap().get(&addr.ip()).cloned();
+                    key.and_then(|k| k.open(raw).map(|p| (p, Some(k), addr)))
+                } else if private::is_pair_start(raw) {
+                    let session = shared.private.lock().unwrap().clone();
+                    if let Some(s) = session {
+                        let now = Instant::now();
+                        let tries = pair_tries.entry(addr.ip()).or_insert((now, 0));
+                        if now - tries.0 > Duration::from_secs(60) {
+                            *tries = (now, 0);
+                        }
+                        // A resend of the same PairStart gets the same answer:
+                        // a new key would undo the one the sender just got.
+                        if let Some((start, reply)) = answered.get(&addr.ip())
+                            && start.as_slice() == raw
+                        {
+                            let _ = sock.send_to(reply, addr);
+                        } else {
+                            tries.1 += 1;
+                            if tries.1 <= PAIR_TRIES_PER_MINUTE
+                                && let Some((reply, key)) = private::answer(raw, &s.code, &s.name)
+                            {
+                                // With a wrong code this is a key the sender
+                                // doesn't have, so nothing it sends will open.
+                                shared.keys.lock().unwrap().insert(addr.ip(), Arc::new(key));
+                                let _ = sock.send_to(&reply, addr);
+                                answered.insert(addr.ip(), (raw.to_vec(), reply));
+                            }
+                        }
+                    }
+                    None
+                } else if shared.private.lock().unwrap().is_some() {
+                    None
+                } else {
+                    Some((raw.to_vec(), None, addr))
+                }
+            }
+            Err(_) => None,
+        };
+
+        if let Some((data, key, addr)) = got {
+            match protocol::decode(&data) {
                 Some(Packet::Audio { stream, seq, blocks, retransmit }) => {
                     join(&mut sources, addr, stream, output.as_ref());
                     let src = sources.get_mut(&(addr, stream)).unwrap();
+                    src.key = key.clone();
                     let now = Instant::now();
                     if !retransmit {
                         src.track_gap((now - src.last_seen).as_secs_f64());
@@ -493,12 +592,13 @@ pub fn run_hub(
                     let missing = src.writer.take_nacks();
                     if !missing.is_empty() {
                         protocol::encode_nack(&mut out, stream, &missing);
-                        let _ = sock.send_to(&out, addr);
+                        tx(&sock, Some(addr), src.key.as_deref(), &out, &mut sealed);
                     }
                 }
                 Some(Packet::Opus { stream, seq, frames, retransmit }) => {
                     join(&mut sources, addr, stream, output.as_ref());
                     let src = sources.get_mut(&(addr, stream)).unwrap();
+                    src.key = key.clone();
                     let now = Instant::now();
                     if !retransmit {
                         src.track_gap((now - src.last_seen).as_secs_f64());
@@ -530,7 +630,7 @@ pub fn run_hub(
                     let missing = src.writer.take_nacks();
                     if !missing.is_empty() {
                         protocol::encode_nack(&mut out, stream, &missing);
-                        let _ = sock.send_to(&out, addr);
+                        tx(&sock, Some(addr), src.key.as_deref(), &out, &mut sealed);
                     }
                 }
                 Some(Packet::Want { device, port, system, mic }) => {
@@ -538,12 +638,13 @@ pub fn run_hub(
                     shared.wants.lock().unwrap().insert((addr.ip(), device), want);
                     // Acknowledge, so a client that sends nothing still knows we're here.
                     protocol::encode_status(&mut out, 0, 0.0);
-                    let _ = sock.send_to(&out, addr);
+                    tx(&sock, Some(addr), key.as_deref(), &out, &mut sealed);
                 }
                 Some(Packet::Hello { stream, device, source, os, name }) => {
                     join(&mut sources, addr, stream, output.as_ref());
                     let src = sources.get_mut(&(addr, stream)).unwrap();
                     src.who = Some((Identity { device, name, os }, source));
+                    src.key = key;
                 }
                 _ => {}
             }
@@ -561,7 +662,7 @@ pub fn run_hub(
         if now - status >= Duration::from_secs(1) {
             for ((addr, stream), s) in &sources {
                 protocol::encode_status(&mut out, *stream, s.stats.latency_ms());
-                let _ = sock.send_to(&out, addr);
+                tx(&sock, Some(*addr), s.key.as_deref(), &out, &mut sealed);
             }
             status = now;
         }
