@@ -102,15 +102,14 @@ Run the tests with `cargo test`.
 - [x] Private sessions, phase 1: a private listener shows a code, audio senders join with it, and the audio is encrypted
 - [ ] Private sessions, phase 2: sign in with email and password, or Google, so your own devices trust each other without a code
 
-See [docs/roadmap.md](docs/roadmap.md) for how each V1 feature will be built, and [docs/private-sessions.md](docs/private-sessions.md) for the private sessions plan.
 
 ### V1.1
 
-- [ ] Android and iOS: listen and send the mic first, then listener, then system audio where the OS allows it. Plan: [docs/roadmap.md](docs/roadmap.md#3-android-and-ios-v11).
+- [ ] Android and iOS: listen and send the mic first, then listener, then system audio where the OS allows it.
 
 ### V1.2
 
-- [ ] Redesign the Mac app in the native macOS visual language: real title bar and menus, system materials, the user's accent colour, and Mac-style controls. See [docs/v1.2-mac-redesign.md](docs/v1.2-mac-redesign.md).
+- [ ] Redesign the Mac app in the native macOS visual language: real title bar and menus, system materials, the user's accent colour, and Mac-style controls.
 
 ### Later
 
