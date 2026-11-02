@@ -383,7 +383,14 @@ pub struct HubShared {
     /// Set while private: the code and the name shown to devices that pair.
     /// Plain packets are then refused.
     pub private: Mutex<Option<PrivateHub>>,
+    /// Devices that were connected when the listener turned private, by
+    /// address and when. They may ask for the code (see `private::Upgrade`).
+    pub grandfather: Mutex<HashMap<IpAddr, Instant>>,
 }
+
+/// How long a device connected before the listener turned private may ask
+/// for the code.
+pub const GRANDFATHER: Duration = Duration::from_secs(60);
 
 #[derive(Clone)]
 pub struct PrivateHub {
@@ -477,6 +484,7 @@ pub fn run_hub(
     let mut sealed = Vec::new();
     let mut pair_tries: HashMap<IpAddr, (Instant, u32)> = HashMap::new();
     let mut answered: HashMap<IpAddr, (Vec<u8>, Vec<u8>)> = HashMap::new();
+    let mut upgraded: HashMap<IpAddr, (Vec<u8>, Vec<u8>)> = HashMap::new();
     let mut report = Instant::now();
     let mut publish = Instant::now();
     let mut status = Instant::now();
@@ -586,6 +594,20 @@ pub fn run_hub(
                                 let _ = sock.send_to(&reply, addr);
                                 answered.insert(addr.ip(), (raw.to_vec(), reply));
                             }
+                        }
+                    }
+                    None
+                } else if private::is_upgrade_request(raw) {
+                    let session = shared.private.lock().unwrap().clone();
+                    let allowed = shared.grandfather.lock().unwrap().get(&addr.ip()).is_some_and(|t| t.elapsed() < GRANDFATHER);
+                    if let (Some(s), true) = (session, allowed) {
+                        if let Some((req, reply)) = upgraded.get(&addr.ip())
+                            && req.as_slice() == raw
+                        {
+                            let _ = sock.send_to(reply, addr);
+                        } else if let Some(reply) = private::answer_upgrade(raw, &s.code) {
+                            let _ = sock.send_to(&reply, addr);
+                            upgraded.insert(addr.ip(), (raw.to_vec(), reply));
                         }
                     }
                     None

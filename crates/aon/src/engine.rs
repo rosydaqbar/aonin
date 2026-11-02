@@ -8,7 +8,7 @@
 use crate::audio;
 use crate::discovery::{Advert, Discovery};
 use crate::net::{self, HubShared, Identity, PrivateHub, SendConfig, SendShared};
-use crate::private::{self, Cipher, Pairing};
+use crate::private::{self, Cipher, Pairing, Upgrade};
 use anyhow::{Result, anyhow};
 use aon_core::protocol::{self, DEFAULT_PORT, Os, Quality, Source};
 use serde::Serialize;
@@ -36,6 +36,9 @@ const JOIN_RESEND: Duration = Duration::from_millis(300);
 const JOIN_TIMEOUT: Duration = Duration::from_secs(3);
 /// How often a lost private link tries to pair again with the saved code.
 const REJOIN_EVERY: Duration = Duration::from_secs(4);
+/// How long an audio sender asks a listener that turned private for the
+/// code before it gives up and disconnects.
+const UPGRADE_WAIT: Duration = Duration::from_secs(6);
 
 /// Looking for the private listener that has a code.
 struct Join {
@@ -178,6 +181,9 @@ pub struct Engine {
     /// Why the last handover didn't happen; shown until the next one.
     handover_error: Mutex<Option<String>>,
     join: Mutex<Option<Join>>,
+    /// Sending to a listener that just turned private: asking it for the
+    /// code (listener id, request, started, last sent).
+    upgrade: Mutex<Option<(u64, Upgrade, Instant, Option<Instant>)>>,
     /// Why the last join with a code failed; shown until the next try.
     join_error: Mutex<Option<String>>,
     last_rejoin: Mutex<Option<Instant>>,
@@ -402,6 +408,7 @@ impl Engine {
             handover: Mutex::new(None),
             handover_error: Mutex::new(None),
             join: Mutex::new(None),
+            upgrade: Mutex::new(None),
             join_error: Mutex::new(None),
             last_rejoin: Mutex::new(None),
         })
@@ -516,6 +523,20 @@ impl Engine {
         }
         if code.is_some() && self.handover.lock().unwrap().is_some() {
             return Err(anyhow!("Wait for the handover to finish."));
+        }
+        // Devices sending here right now come along: they may ask for the
+        // code for a little while (see `private::Upgrade`).
+        if code.is_some()
+            && let Some(h) = self.host.lock().unwrap().as_ref()
+        {
+            let now = Instant::now();
+            let mut g = h.shared.grandfather.lock().unwrap();
+            for s in h.shared.streams.lock().unwrap().iter() {
+                g.insert(s.addr.ip(), now);
+            }
+            for (ip, _) in h.shared.wants.lock().unwrap().keys() {
+                g.insert(*ip, now);
+            }
         }
         self.prefs.lock().unwrap().private_code = code;
         self.apply_private();
@@ -636,6 +657,9 @@ impl Engine {
     /// private listener.
     fn connect_with(&self, host: u64, private: Option<(String, Arc<Cipher>, String)>) -> Result<()> {
         let mut peer = self.disco.peers.lock().unwrap().get(&host).cloned().ok_or_else(|| anyhow!("That listener is no longer on the network."))?;
+        // Rejoining the same listener (it turned private, or restarted)
+        // keeps what we asked to hear from it.
+        let hear = self.link.lock().unwrap().as_ref().filter(|l| l.host == host).map(|l| l.hear).unwrap_or_default();
         let (cipher, code) = match private {
             Some((name, cipher, code)) => {
                 peer.advert.name = name;
@@ -667,9 +691,17 @@ impl Engine {
             cipher,
             since: Instant::now(),
         });
-        let mut p = self.prefs.lock().unwrap();
-        p.last_host = Some(host);
-        p.last_code = code;
+        {
+            let mut p = self.prefs.lock().unwrap();
+            p.last_host = Some(host);
+            p.last_code = code;
+        }
+        if hear.system {
+            self.set_hear(Source::System, true)?;
+        }
+        if hear.mic {
+            self.set_hear(Source::Mic, true)?;
+        }
         Ok(())
     }
 
@@ -948,6 +980,54 @@ impl Engine {
         }
     }
 
+    /// The listener we send to turned private: ask it for the code, which it
+    /// gives to devices that were connected at that moment.
+    fn drive_upgrade(&self, peers: &[crate::discovery::Peer]) {
+        if self.upgrade_step(peers) {
+            // It never gave us the code: we joined after it turned private.
+            self.forget_host();
+        }
+    }
+
+    /// One step of `drive_upgrade`; true when it is time to give up.
+    fn upgrade_step(&self, peers: &[crate::discovery::Peer]) -> bool {
+        let link = self.link.lock().unwrap().as_ref().map(|l| (l.host, l.addr, l.cipher.is_some()));
+        let need = link.filter(|(host, _, sealed)| !sealed && peers.iter().any(|p| p.advert.id == *host && p.advert.private));
+        let mut up = self.upgrade.lock().unwrap();
+        let Some((host, addr, _)) = need else {
+            *up = None;
+            return false;
+        };
+        if up.as_ref().is_none_or(|u| u.0 != host) {
+            *up = Some((host, Upgrade::default(), Instant::now(), None));
+        }
+        let u = up.as_mut().unwrap();
+        // The listener answers at once if it will; a few seconds is plenty.
+        if u.2.elapsed() > UPGRADE_WAIT {
+            *up = None;
+            return true;
+        }
+        if u.3.is_none_or(|t| t.elapsed() >= JOIN_RESEND) {
+            let _ = self.ctrl.send_to(&u.1.request, addr);
+            u.3 = Some(Instant::now());
+        }
+        false
+    }
+
+    /// The listener sent its code: join with it right away.
+    fn on_upgrade_reply(&self, data: &[u8]) {
+        let got = {
+            let mut up = self.upgrade.lock().unwrap();
+            let Some(u) = up.as_ref() else { return };
+            let Some(code) = u.1.finish(data) else { return };
+            let host = u.0;
+            *up = None;
+            (host, code)
+        };
+        let (host, code) = got;
+        *self.join.lock().unwrap() = Some(Join { code, tries: HashMap::new(), started: Instant::now(), last_send: None, quiet: true, only: Some(host) });
+    }
+
     /// A listener answered our PairStart: connect if the code was right.
     fn on_pair_reply(&self, data: &[u8], from: SocketAddr) {
         let paired = {
@@ -1119,12 +1199,27 @@ impl Engine {
             }
         }
 
+        // The listener we send to pressed Stop: disconnect at once instead of
+        // waiting for it. (A listener that quit or dropped off the network
+        // just disappears, and we keep waiting to reconnect.)
+        let stopped = self.link.lock().unwrap().as_ref().is_some_and(|l| {
+            peers.iter().any(|p| p.advert.id == l.host && !p.advert.hosting && p.advert.handover.is_none())
+        });
+        if stopped {
+            self.forget_host();
+        }
+
         self.drive_join(&peers);
+        self.drive_upgrade(&peers);
         let mut buf = [0u8; 512];
         while let Ok((n, from)) = self.ctrl.recv_from(&mut buf) {
             let data = &buf[..n];
             if private::is_pair_reply(data) {
                 self.on_pair_reply(data, from);
+                continue;
+            }
+            if private::is_upgrade_reply(data) {
+                self.on_upgrade_reply(data);
                 continue;
             }
             let cipher = self.link.lock().unwrap().as_ref().and_then(|l| l.cipher.clone());

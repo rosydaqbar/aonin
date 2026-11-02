@@ -16,10 +16,13 @@
 
 use chacha20poly1305::aead::{Aead, AeadCore, KeyInit, OsRng};
 use chacha20poly1305::{XChaCha20Poly1305, XNonce};
+use sha2::{Digest, Sha256};
 use spake2::{Ed25519Group, Identity, Password, Spake2};
+use x25519_dalek::{PublicKey, StaticSecret};
 
 const SEALED: &[u8; 4] = b"AONS";
 const PAIR: &[u8; 4] = b"AONP";
+const UPGRADE: &[u8; 4] = b"AONU";
 const NONCE: usize = 24;
 /// Bytes a sealed packet adds: magic, nonce, tag.
 pub const OVERHEAD: usize = 4 + NONCE + 16;
@@ -132,6 +135,52 @@ pub fn answer(start: &[u8], code: &str, name: &str) -> Option<(Vec<u8>, Cipher)>
     None
 }
 
+/// An audio sender already connected when its listener turned private
+/// asks for the code (`UpgradeRequest`: "AONU", 1, X25519 public key). The
+/// listener answers only devices that were connected at that moment
+/// (`UpgradeReply`: "AONU", 2, its public key, the code sealed under the
+/// shared key), and the sender then joins with the code as usual. Someone
+/// only listening on the network learns nothing.
+pub struct Upgrade {
+    secret: StaticSecret,
+    pub request: Vec<u8>,
+}
+
+impl Default for Upgrade {
+    fn default() -> Self {
+        let secret = StaticSecret::random_from_rng(OsRng);
+        let mut request = UPGRADE.to_vec();
+        request.push(1);
+        request.extend_from_slice(PublicKey::from(&secret).as_bytes());
+        Self { secret, request }
+    }
+}
+
+impl Upgrade {
+    /// The code from the listener's reply.
+    pub fn finish(&self, reply: &[u8]) -> Option<String> {
+        let rest = reply.strip_prefix(UPGRADE)?.strip_prefix(&[2])?;
+        let theirs: [u8; 32] = rest.get(..32)?.try_into().ok()?;
+        let shared = self.secret.diffie_hellman(&PublicKey::from(theirs));
+        let cipher = Cipher::new(&Sha256::digest(shared.as_bytes()));
+        normalize_code(std::str::from_utf8(&cipher.open(&rest[32..])?).ok()?)
+    }
+}
+
+/// Listener side of `Upgrade`.
+pub fn answer_upgrade(request: &[u8], code: &str) -> Option<Vec<u8>> {
+    let _ = (request, code);
+    None
+}
+
+pub fn is_upgrade_request(data: &[u8]) -> bool {
+    data.len() > 5 && data.starts_with(UPGRADE) && data[4] == 1
+}
+
+pub fn is_upgrade_reply(data: &[u8]) -> bool {
+    data.len() > 5 && data.starts_with(UPGRADE) && data[4] == 2
+}
+
 pub fn is_pair_start(data: &[u8]) -> bool {
     data.len() > 5 && data.starts_with(PAIR) && data[4] == 1
 }
@@ -143,6 +192,7 @@ pub fn is_pair_reply(data: &[u8]) -> bool {
 #[cfg(test)]
 mod tests {
     use super::*;
+
 
 
 

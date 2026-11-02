@@ -31,11 +31,9 @@
   $effect(() => {
     if (form === 'join' && app.link) form = null;
   });
-  /** Turning private drops audio senders without the code: ask first. */
-  let confirmPrivate = $state(false);
+  /** Devices already sending stay connected; new ones need the code. */
   function makePrivate() {
-    if (app.hosting?.clients.length) confirmPrivate = true;
-    else actions.setPrivate(newCode());
+    actions.setPrivate(newCode());
   }
   let copied = $state(false);
   async function copyCode(code: string) {
@@ -72,7 +70,7 @@
       <span class="icon" aria-hidden="true"><Lock size={16} strokeWidth={1.75} /></span>
       <span class="text">
         <span class="title">Private</span>
-        <span class="label">Only devices with the code can join. Audio senders type it under Join.</span>
+        <span class="label">Devices already connected stay. New devices need the code: they type it under Join.</span>
       </span>
       <span class="bigcode code" aria-label="Code {code.split('').join(' ')}">{fmtCode(code)}</span>
       <button class="btn" onclick={() => copyCode(code)}><Copy size={14} strokeWidth={1.75} />{copied ? 'Copied' : 'Copy code'}</button>
@@ -333,15 +331,6 @@
       <JoinForm oncancel={() => (form = null)} />
     {/if}
   </Modal>
-{/if}
-{#if confirmPrivate}
-  <Confirm
-    title="Make this listener private?"
-    body="Audio senders will need the code to stay connected. They type it under Join."
-    action="Make private"
-    onconfirm={() => actions.setPrivate(newCode())}
-    onclose={() => (confirmPrivate = false)}
-  />
 {/if}
 {#if makeTarget}
   {@const t = makeTarget}

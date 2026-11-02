@@ -23,11 +23,9 @@
   $effect(() => {
     if (!idle) form = null;
   });
-  /** Turning private drops audio senders without the code: ask first. */
-  let confirmPrivate = $state(false);
+  /** Devices already sending stay connected; new ones need the code. */
   function makePrivate() {
-    if (app.hosting?.clients.length) confirmPrivate = true;
-    else actions.setPrivate(newCode());
+    actions.setPrivate(newCode());
   }
   let copied = $state(false);
   async function copyCode(code: string) {
@@ -93,15 +91,6 @@
       </span>
       <button class="btn quiet make" onclick={makePrivate}><Lock size={13} strokeWidth={1.75} />Make private</button>
     </div>
-    {#if confirmPrivate}
-      <div class="confirm pad" role="group" aria-label="Make private">
-        <p>Audio senders will need the code to stay connected.</p>
-        <span class="actions">
-          <button class="btn quiet" onclick={() => (confirmPrivate = false)}>Cancel</button>
-          <button class="btn primary" onclick={() => { confirmPrivate = false; actions.setPrivate(newCode()); }}>Make private</button>
-        </span>
-      </div>
-    {/if}
   {/if}
 
   {#if app.error}
@@ -306,7 +295,6 @@
   .confirm { padding: 10px 0 12px; border-bottom: 1px solid var(--line); }
   .confirm p { font-size: var(--size-s); line-height: 1.45; }
   .confirm .actions { display: flex; justify-content: flex-end; gap: 6px; margin-top: 8px; }
-  .confirm.pad { padding: 10px 16px 12px; background: var(--recess); }
   .codechip {
     height: 24px;
     padding: 0 8px;

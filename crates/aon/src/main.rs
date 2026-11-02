@@ -55,6 +55,12 @@ enum Cmd {
         /// The name audio senders see.
         #[arg(long)]
         name: Option<String>,
+        /// Testing: turn private (with a new code) after this many seconds.
+        #[arg(long, hide = true)]
+        private_after: Option<u64>,
+        /// Testing: press Stop after this many seconds, then keep running.
+        #[arg(long, hide = true)]
+        stop_after: Option<u64>,
     },
     /// Join a host found on the network through the app engine.
     Join {
@@ -127,7 +133,7 @@ fn main() -> Result<()> {
             println!("{:?}", c.get());
             Ok(())
         }
-        Cmd::Host { output, hand_over_after, private, name } => {
+        Cmd::Host { output, hand_over_after, private, name, private_after, stop_after } => {
             let engine = cli_engine(output);
             let code = private.map(|c| if c == "new" { aon::private::new_code() } else { c });
             if let Some(c) = &code {
@@ -136,9 +142,21 @@ fn main() -> Result<()> {
             engine.start_listening(name, code)?;
             let start = std::time::Instant::now();
             let mut handed = false;
+            let (mut made_private, mut stopped) = (false, false);
             loop {
                 std::thread::sleep(std::time::Duration::from_millis(250));
                 let snap = engine.tick();
+                if !made_private && private_after.is_some_and(|s| start.elapsed().as_secs() >= s) {
+                    let c = aon::private::new_code();
+                    println!("-- private, code {c}");
+                    engine.set_private(Some(c))?;
+                    made_private = true;
+                }
+                if !stopped && stop_after.is_some_and(|s| start.elapsed().as_secs() >= s) {
+                    println!("-- stop");
+                    engine.stop_hosting();
+                    stopped = true;
+                }
                 if !handed
                     && hand_over_after.is_some_and(|s| start.elapsed().as_secs() >= s)
                     && let Some((id, name)) = snap.client_ids().into_iter().next()
