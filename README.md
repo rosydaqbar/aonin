@@ -97,9 +97,10 @@ Run the tests with `cargo test`.
 ### V1
 
 - [x] Hand the listener role to another device, with every audio sender following it
-- [ ] Private connections: pair devices with a one-time code, with encrypted audio; an optional account later
+- [ ] Private sessions, phase 1: pair a device once with a 6-digit code, and encrypt the audio
+- [ ] Private sessions, phase 2: sign in with email and password, or Google, so your own devices trust each other without a code
 
-See [docs/roadmap.md](docs/roadmap.md) for how each V1 feature will be built.
+See [docs/roadmap.md](docs/roadmap.md) for how each V1 feature will be built, and [docs/private-sessions.md](docs/private-sessions.md) for the private sessions plan.
 
 ### V1.1
 
