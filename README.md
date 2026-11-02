@@ -100,11 +100,15 @@ Run the tests with `cargo test`.
 - [ ] Private connections: pair devices with a one-time code, with encrypted audio; an optional account later
 - [ ] Android and iOS: listen and send the mic first, then listener, then system audio where the OS allows it
 
+See [docs/roadmap.md](docs/roadmap.md) for how each V1 feature will be built.
+
+### V1.2
+
+- [ ] Redesign the Mac app in the native macOS visual language: real title bar and menus, system materials, the user's accent colour, and Mac-style controls. See [docs/v1.2-mac-redesign.md](docs/v1.2-mac-redesign.md).
+
 ### Later
 
 - [ ] Code signing for Windows (e.g. SignPath for open source) and macOS (Apple Developer ID + notarization)
-
-See [docs/roadmap.md](docs/roadmap.md) for how each V1 feature will be built.
 
 ## License
 
