@@ -247,6 +247,16 @@
           <p class="empty">Nothing is streaming right now.</p>
         {/if}
         {#if app.me.os === 'macos'}
+          <div class="titlebar"><h2>Local network access</h2></div>
+          <div class="update">
+            <span class="icon" aria-hidden="true"><Network size={16} strokeWidth={1.75} /></span>
+            <span class="text">
+              <span>{app.issues.includes('localNetwork') ? 'macOS is blocking Aonin from this network' : 'Aonin can reach this network'}</span>
+              <span class="label">macOS asks once. If it never asked, or Aonin is missing from Privacy &amp; Security › Local Network, ask again. Then switch Aonin on there.</span>
+            </span>
+            <button class="btn" onclick={actions.askLocalNetwork}>Ask again</button>
+            <button class="btn" onclick={() => actions.fixIssue('localNetwork')}>Open settings</button>
+          </div>
           <div class="titlebar"><h2>Wi-Fi</h2></div>
           <Switch icon={Wifi} label="Keep Wi-Fi steady" hint="Turns off AirDrop and Handoff scanning, which makes Mac Wi-Fi stall every few seconds. Asks for your password; back on when you switch this off or restart." checked={app.options.quietWifi} onchange={(on) => actions.setQuietWifi(on)} />
         {/if}

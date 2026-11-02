@@ -125,6 +125,12 @@ fn fix_issue(engine: Eng, issue: String) -> Result<(), String> {
     engine.fix_issue(&issue).map_err(err)
 }
 
+/// macOS: make the Local Network prompt appear again.
+#[tauri::command]
+fn ask_local_network(engine: Eng) {
+    engine.ask_local_network();
+}
+
 /// Install the downloaded update and start the new version.
 #[tauri::command(async)]
 fn install_update(app: AppHandle, engine: Eng) -> Result<(), String> {
@@ -510,7 +516,8 @@ pub fn run() {
             set_reconnect,
             install_update,
             check_update,
-            fix_issue
+            fix_issue,
+            ask_local_network
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");

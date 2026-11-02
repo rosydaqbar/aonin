@@ -28,6 +28,7 @@
       <div class="issue">
         <span class="mark" aria-hidden="true"><TriangleAlert size={15} strokeWidth={1.75} /></span>
         <p>{c.text}</p>
+        {#if issue === 'localNetwork'}<button class="btn" onclick={actions.askLocalNetwork} title="Show the macOS prompt again">Ask again</button>{/if}
         <button class="btn primary" onclick={() => actions.fixIssue(issue)}>{c.action}</button>
       </div>
     {/each}

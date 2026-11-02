@@ -3,11 +3,15 @@
 <plist version="1.0">
 <dict>
   <key>NSAudioCaptureUsageDescription</key>
-  <string>Aonin sends this Mac's sound to the host you connect to.</string>
+  <string>Aonin sends this Mac's sound to the listener you join.</string>
   <key>NSMicrophoneUsageDescription</key>
-  <string>Aonin sends your microphone to the host when you turn on Send microphone.</string>
+  <string>Aonin sends your microphone to the listener when you turn on Microphone.</string>
   <key>NSLocalNetworkUsageDescription</key>
   <string>Aonin streams audio between the computers on your local network.</string>
+  <key>NSBonjourServices</key>
+  <array>
+    <string>_aonin._udp</string>
+  </array>
   <key>LSUIElement</key>
   <true/>
 </dict>

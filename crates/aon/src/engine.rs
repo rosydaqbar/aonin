@@ -380,6 +380,8 @@ impl Engine {
         *disco.me.lock().unwrap() = Advert { id: device, name: name.clone(), macos: os == Os::MacOs, port: DEFAULT_PORT, ..Default::default() };
         let d = disco.clone();
         std::thread::Builder::new().name("aonin-discovery".into()).spawn(move || d.run()).expect("spawn discovery");
+        // macOS shows its Local Network prompt now rather than mid-stream.
+        crate::permissions::advertise(DEFAULT_PORT);
         Arc::new(Self {
             me: Identity { device, name, os },
             disco,
@@ -1233,6 +1235,16 @@ impl Engine {
             joining,
             join_error,
         }
+    }
+
+    /// macOS: make the Local Network prompt appear again (see
+    /// `permissions::ask_local_network`).
+    pub fn ask_local_network(&self) {
+        let mut ips: Vec<IpAddr> = self.disco.peers.lock().unwrap().values().map(|p| p.ip).collect();
+        if let Some(l) = self.link.lock().unwrap().as_ref() {
+            ips.push(l.addr.ip());
+        }
+        crate::permissions::ask_local_network(ips);
     }
 
     /// Fix what the UI shows for an issue, then check again.

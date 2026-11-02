@@ -164,7 +164,7 @@ dependencies = [
 
 [[package]]
 name = "aonin"
-version = "0.1.7"
+version = "0.1.8"
 dependencies = [
  "aon",
  "aon-core",

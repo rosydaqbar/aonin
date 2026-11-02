@@ -91,6 +91,33 @@ pub fn fix(issue: &str) -> anyhow::Result<()> {
     anyhow::bail!("unknown issue {issue}")
 }
 
+/// macOS: make the Local Network prompt appear (again). macOS asks the
+/// first time an app reaches a device on the LAN, but it keys the answer to
+/// the app's signature, and an unsigned build has a new one every version,
+/// so the prompt can go missing. A Bonjour browse for Aonin's service is the
+/// reliable trigger; packets straight to each known device and to every
+/// subnet's broadcast address back it up. Runs for a few seconds in the
+/// background. Elsewhere it does nothing.
+pub fn ask_local_network(peers: Vec<std::net::IpAddr>) {
+    #[cfg(target_os = "macos")]
+    std::thread::Builder::new()
+        .name("aonin-local-network".into())
+        .spawn(move || mac::ask_local_network(&peers))
+        .ok();
+    #[cfg(not(target_os = "macos"))]
+    let _ = peers;
+}
+
+/// macOS: advertise Aonin over Bonjour (`_aonin._udp`) for as long as the
+/// app runs. Registering touches the local network, so macOS shows its
+/// prompt at launch instead of on the first stream.
+pub fn advertise(port: u16) {
+    #[cfg(target_os = "macos")]
+    mac::advertise(port);
+    #[cfg(not(target_os = "macos"))]
+    let _ = port;
+}
+
 #[cfg(target_os = "macos")]
 mod mac {
     use objc2_core_foundation::CFString;
@@ -121,6 +148,72 @@ mod mac {
                 (!sym.is_null()).then(|| std::mem::transmute::<*mut c_void, Preflight>(sym))
             }
         })
+    }
+
+    // Bonjour, from libSystem (dns_sd.h).
+    type ServiceRef = *mut c_void;
+    type BrowseReply = extern "C" fn(ServiceRef, u32, u32, i32, *const c_char, *const c_char, *const c_char, *mut c_void);
+    type RegisterReply = extern "C" fn(ServiceRef, u32, i32, *const c_char, *const c_char, *const c_char, *mut c_void);
+    unsafe extern "C" {
+        fn DNSServiceBrowse(sd: *mut ServiceRef, flags: u32, interface: u32, regtype: *const c_char, domain: *const c_char, reply: BrowseReply, ctx: *mut c_void) -> i32;
+        fn DNSServiceRegister(
+            sd: *mut ServiceRef,
+            flags: u32,
+            interface: u32,
+            name: *const c_char,
+            regtype: *const c_char,
+            domain: *const c_char,
+            host: *const c_char,
+            port: u16,
+            txt_len: u16,
+            txt: *const c_void,
+            reply: RegisterReply,
+            ctx: *mut c_void,
+        ) -> i32;
+        fn DNSServiceRefDeallocate(sd: ServiceRef);
+    }
+    extern "C" fn on_browse(_: ServiceRef, _: u32, _: u32, _: i32, _: *const c_char, _: *const c_char, _: *const c_char, _: *mut c_void) {}
+    extern "C" fn on_register(_: ServiceRef, _: u32, _: i32, _: *const c_char, _: *const c_char, _: *const c_char, _: *mut c_void) {}
+
+    const SERVICE: &std::ffi::CStr = c"_aonin._udp";
+
+    pub fn ask_local_network(peers: &[std::net::IpAddr]) {
+        let mut sd: ServiceRef = std::ptr::null_mut();
+        // Safety: valid out pointer, NUL-terminated type, a callback that
+        // ignores its arguments. Released below.
+        let ok = unsafe { DNSServiceBrowse(&mut sd, 0, 0, SERVICE.as_ptr(), std::ptr::null(), on_browse, std::ptr::null_mut()) } == 0;
+        if let Ok(sock) = std::net::UdpSocket::bind(("0.0.0.0", 0)) {
+            let _ = sock.set_broadcast(true);
+            let mut targets: Vec<std::net::IpAddr> = peers.to_vec();
+            if let Ok(ifs) = if_addrs::get_if_addrs() {
+                for i in ifs {
+                    if let if_addrs::IfAddr::V4(v4) = i.addr
+                        && let Some(b) = v4.broadcast.filter(|_| !v4.ip.is_loopback())
+                    {
+                        targets.push(b.into());
+                    }
+                }
+            }
+            for _ in 0..3 {
+                for ip in &targets {
+                    let _ = sock.send_to(b"AONQ", (*ip, crate::discovery::BEACON_PORT));
+                }
+                std::thread::sleep(std::time::Duration::from_secs(1));
+            }
+        }
+        std::thread::sleep(std::time::Duration::from_secs(2));
+        if ok {
+            // Safety: created above, released once.
+            unsafe { DNSServiceRefDeallocate(sd) };
+        }
+    }
+
+    pub fn advertise(port: u16) {
+        let mut sd: ServiceRef = std::ptr::null_mut();
+        // Safety: as above; the registration lives as long as the process.
+        unsafe {
+            DNSServiceRegister(&mut sd, 0, 0, std::ptr::null(), SERVICE.as_ptr(), std::ptr::null(), std::ptr::null(), port.to_be(), 0, std::ptr::null(), on_register, std::ptr::null_mut());
+        }
     }
 
     /// The user turned this permission off for Aonin.

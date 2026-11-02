@@ -64,6 +64,10 @@ export const actions = {
   async disconnect() {
     if (!(await call('disconnect'))) app.link = null;
   },
+  /** macOS: make the Local Network prompt appear again. */
+  async askLocalNetwork() {
+    await call('ask_local_network');
+  },
   async fixIssue(issue: Issue) {
     if (!(await call('fix_issue', { issue }))) app.issues = app.issues.filter((i) => i !== issue);
   },
