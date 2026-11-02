@@ -80,6 +80,8 @@ Run the tests with `cargo test`.
 
 ## Roadmap
 
+### Done
+
 - [x] Highest-quality streaming with redundancy, retransmit and an adaptive jitter buffer
 - [x] System audio and mic capture on Windows and macOS, no drivers
 - [x] LAN discovery, host/client roles, loop detection, auto-reconnect
@@ -91,12 +93,18 @@ Run the tests with `cargo test`.
 - [x] Open at login, and an optional "keep Wi-Fi steady" switch on macOS (turns off AWDL)
 - [x] Installers built by GitHub Actions (Windows NSIS, macOS DMG)
 - [x] Automatic updates, signed
-- [ ] Hand the host role to another device from the host, with every client following it
-- [ ] Private connections: pair devices with a one-time code, with encrypted audio; an optional account later
-- [ ] Android and iOS: listen and send the mic first, then host, then system audio where the OS allows it
-- [ ] Later: code signing for Windows (e.g. SignPath for open source) and macOS (Apple Developer ID + notarization)
 
-See [docs/roadmap.md](docs/roadmap.md) for how each one will be built.
+### V1
+
+- [ ] Hand the listener role to another device, with every audio sender following it
+- [ ] Private connections: pair devices with a one-time code, with encrypted audio; an optional account later
+- [ ] Android and iOS: listen and send the mic first, then listener, then system audio where the OS allows it
+
+### Later
+
+- [ ] Code signing for Windows (e.g. SignPath for open source) and macOS (Apple Developer ID + notarization)
+
+See [docs/roadmap.md](docs/roadmap.md) for how each V1 feature will be built.
 
 ## License
 
