@@ -96,7 +96,7 @@ Run the tests with `cargo test`.
 
 ### V1
 
-- [ ] Hand the listener role to another device, with every audio sender following it
+- [x] Hand the listener role to another device, with every audio sender following it
 - [ ] Private connections: pair devices with a one-time code, with encrypted audio; an optional account later
 - [ ] Android and iOS: listen and send the mic first, then listener, then system audio where the OS allows it
 

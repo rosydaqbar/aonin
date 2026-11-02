@@ -74,6 +74,8 @@ export interface AppState {
   /** This build's version, and a newer one downloaded and ready to install. */
   version: string;
   update: string | null;
+  /** Name of the device this listener is handing its role to. */
+  handingOver: string | null;
 }
 
 export const QUALITY: Record<Quality, { label: string; detail: string; rate: string }> = {
@@ -91,6 +93,7 @@ const base: AppState = {
   hosting: null,
   link: null,
   hosts: [],
+  handingOver: null,
   quality: 'highest',
   outputLost: false,
   stats: [],
@@ -193,6 +196,7 @@ export async function followBackend() {
 /** A device reads as "connected somewhere" in the strip. */
 export function roleLine(s: AppState): string {
   if (s.issues.length) return 'Needs permission';
+  if (s.handingOver) return `Handing over to ${s.handingOver}…`;
   if (s.hosting && s.outputLost) return 'Output lost';
   if (s.hosting && s.link) return 'Listening · also sending';
   if (s.hosting) {

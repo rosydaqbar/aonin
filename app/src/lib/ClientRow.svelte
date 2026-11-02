@@ -1,12 +1,13 @@
 <script lang="ts">
-  import { Volume2, VolumeX } from '@lucide/svelte';
+  import { ArrowLeftRight, Volume2, VolumeX } from '@lucide/svelte';
   import Grille from './Grille.svelte';
   import StatusMark from './StatusMark.svelte';
   import { fmtMs, type ClientRow } from './state.svelte';
   import { actions } from './actions';
 
   /** `lost`: the host's output device is gone, so nothing is actually playing. */
-  let { row, wide = false, lost = false }: { row: ClientRow; wide?: boolean; lost?: boolean } = $props();
+  /** `onmake`: offer to make this device the listener (wide rows only). */
+  let { row, wide = false, lost = false, onmake }: { row: ClientRow; wide?: boolean; lost?: boolean; onmake?: () => void } = $props();
 
   let what = $derived(
     row.mark === 'connecting'
@@ -43,12 +44,7 @@
     disabled={row.muted}
     aria-label="Volume for {row.name}"
   />
-  {#if wide}
-    <button class="btn" class:dark={row.muted} onclick={() => actions.setMuted(row.id, !row.muted)} aria-pressed={row.muted}>
-      {row.muted ? 'Unmute' : 'Mute'}
-    </button>
-  {:else}
-    <button
+  <button
       class="icon"
       class:on={row.muted}
       onclick={() => actions.setMuted(row.id, !row.muted)}
@@ -57,6 +53,8 @@
     >
       {#if row.muted}<VolumeX size={15} strokeWidth={1.75} />{:else}<Volume2 size={15} strokeWidth={1.75} />{/if}
     </button>
+  {#if wide}
+    <button class="btn make" onclick={onmake} disabled={!onmake}><ArrowLeftRight size={13} strokeWidth={1.75} />Make listener</button>
   {/if}
 </div>
 
@@ -70,8 +68,8 @@
     border-bottom: 1px solid var(--line);
   }
   .row.wide {
-    grid-template-columns: 8px minmax(180px, 1fr) auto 64px 132px 72px;
-    gap: 16px;
+    grid-template-columns: 8px minmax(120px, 1fr) auto 64px 100px 28px 124px;
+    gap: 12px;
     min-height: 52px;
   }
   .who { display: flex; flex-direction: column; min-width: 0; }
@@ -90,5 +88,5 @@
   }
   .icon:hover { border-color: var(--ink-2); }
   .icon.on { background: var(--strip); border-color: var(--strip); color: var(--strip-ink); }
-  .btn { justify-content: center; }
+  .make { display: inline-flex; align-items: center; gap: 6px; padding: 0 12px; white-space: nowrap; justify-content: center; }
 </style>

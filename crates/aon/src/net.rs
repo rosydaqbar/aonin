@@ -61,6 +61,9 @@ pub struct SendShared {
     pub peak: AtomicF32,
     /// Milliseconds since the sender started when the last Status arrived.
     pub last_status_ms: AtomicU32,
+    /// Send to this listener from now on (handover). Capture keeps running,
+    /// so the switch costs no audio on this side.
+    pub retarget: Mutex<Option<SocketAddr>>,
 }
 
 struct Outgoing {
@@ -273,6 +276,13 @@ pub fn run_sender(cfg: SendConfig, mut cap: Consumer<f32>, dev_rate: u32, shared
         peak = peak.max(chunk_peak);
 
         let now = Instant::now();
+        if let Some(to) = shared.retarget.lock().unwrap().take() {
+            // Same stream and sequence: the new listener starts it like any
+            // stream it hasn't heard before. Introduce ourselves at once.
+            if net.sock.connect(to).is_ok() {
+                last_hello = now - HELLO_EVERY;
+            }
+        }
         if now - last_hello >= HELLO_EVERY {
             let _ = net.sock.send(&hello);
             last_hello = now;

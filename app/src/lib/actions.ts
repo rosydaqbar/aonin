@@ -21,6 +21,10 @@ export const actions = {
   async becomeHost() {
     if (!(await call('become_host'))) app.hosting = { output: app.devices.output, clients: [] };
   },
+  async handOver(clientId: string) {
+    if (await call('hand_over', { clientId })) return;
+    app.handingOver = app.hosting?.clients.find((c) => c.id === clientId)?.name ?? null;
+  },
   async stopHosting() {
     if (!(await call('stop_hosting'))) app.hosting = null;
   },

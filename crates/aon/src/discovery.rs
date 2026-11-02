@@ -29,6 +29,10 @@ pub struct Advert {
     /// Every device whose audio reaches this one, directly or through other
     /// hosts. A device must never join a host listed in its own sources.
     pub sources: Vec<u64>,
+    /// A listener handing its role over: the device that takes it. That
+    /// device starts listening, and every audio sender follows it.
+    #[serde(default)]
+    pub handover: Option<u64>,
 }
 
 #[derive(Clone, Debug)]
@@ -121,8 +125,15 @@ mod tests {
 
     #[test]
     fn advert_roundtrips_as_json() {
-        let a = Advert { id: 42, name: "office-mac".into(), macos: true, hosting: true, port: 47_100, clients: 2, sources: vec![7, 9] };
+        let a = Advert { id: 42, name: "office-mac".into(), macos: true, hosting: true, port: 47_100, clients: 2, sources: vec![7, 9], handover: Some(7) };
         let j = serde_json::to_vec(&a).unwrap();
         assert_eq!(serde_json::from_slice::<Advert>(&j).unwrap(), a);
+    }
+
+    /// Beacons from 0.1.x have no `handover`; they must still be understood.
+    #[test]
+    fn old_beacon_without_handover_parses() {
+        let j = br#"{"id":1,"name":"pc","macos":false,"hosting":true,"port":47100,"clients":0,"sources":[]}"#;
+        assert_eq!(serde_json::from_slice::<Advert>(j).unwrap().handover, None);
     }
 }

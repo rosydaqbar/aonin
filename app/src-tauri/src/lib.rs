@@ -150,6 +150,12 @@ fn stop_hosting(engine: Eng) {
     engine.stop_hosting();
 }
 
+/// Hand the listener role to a device that sends here.
+#[tauri::command(async)]
+fn hand_over(engine: Eng, client_id: String) -> Result<(), String> {
+    engine.hand_over(parse_host(&client_id)?).map_err(err)
+}
+
 #[tauri::command(async)]
 fn connect(engine: Eng, host_id: String) -> Result<(), String> {
     engine.connect(parse_host(&host_id)?).map_err(err)
@@ -441,6 +447,7 @@ pub fn run() {
             quit,
             become_host,
             stop_hosting,
+            hand_over,
             connect,
             disconnect,
             set_volume,

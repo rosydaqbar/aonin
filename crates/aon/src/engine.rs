@@ -25,6 +25,19 @@ const LINK_TIMEOUT_MS: u32 = 3_000;
 /// A client re-sends its Want this often; the host drops it after WANT_EXPIRE.
 const WANT_EVERY: Duration = Duration::from_secs(1);
 const WANT_EXPIRE: Duration = Duration::from_secs(3);
+/// Handover: how long the new listener has to start, and how long the old
+/// one keeps announcing where everyone went (for senders that missed it).
+const HANDOVER_START: Duration = Duration::from_secs(8);
+const HANDOVER_ANNOUNCE: Duration = Duration::from_secs(10);
+
+/// This device is handing its listener role to `to`.
+struct Handover {
+    to: u64,
+    name: String,
+    since: Instant,
+    /// When `to` started listening and this device stopped.
+    moved: Option<Instant>,
+}
 
 struct HostRun {
     shared: Arc<HubShared>,
@@ -101,6 +114,9 @@ pub struct Engine {
     /// macOS refused to let us reach the host (Local Network privacy).
     local_net_blocked: std::sync::atomic::AtomicBool,
     perms: crate::permissions::Checker,
+    handover: Mutex<Option<Handover>>,
+    /// Why the last handover didn't happen; shown until the next one.
+    handover_error: Mutex<Option<String>>,
 }
 
 // ---- snapshot: mirrors `AppState` in app/src/lib/state.svelte.ts ----
@@ -121,6 +137,8 @@ pub struct Snapshot {
     options: Options,
     /// Shown when hosting or discovery failed to start.
     error: Option<String>,
+    /// Name of the device this one is handing the listener role to.
+    handing_over: Option<String>,
 }
 
 #[derive(Serialize)]
@@ -242,6 +260,11 @@ impl Snapshot {
         parts.join(" | ")
     }
 
+    /// Ids and names of the devices sending to this listener.
+    pub fn client_ids(&self) -> Vec<(String, String)> {
+        self.hosting.as_ref().map_or(Vec::new(), |h| h.clients.iter().map(|c| (c.id.clone(), c.name.clone())).collect())
+    }
+
     /// Ids and names of the hosts currently visible.
     pub fn host_ids(&self) -> Vec<(String, String, bool)> {
         self.hosts.iter().map(|h| (h.id.clone(), h.name.clone(), h.blocked.is_none())).collect()
@@ -295,6 +318,8 @@ impl Engine {
             last_ack: Mutex::new(None),
             local_net_blocked: Default::default(),
             perms: crate::permissions::Checker::start(),
+            handover: Mutex::new(None),
+            handover_error: Mutex::new(None),
         })
     }
 
@@ -572,6 +597,111 @@ impl Engine {
         }
     }
 
+    /// Listener: hand the role to `client`, one of the devices sending here.
+    /// It starts listening, every sender follows it, and this device then
+    /// sends to it too. All of it travels in the beacon (see `follow_handover`).
+    pub fn hand_over(&self, client: u64) -> Result<()> {
+        let peer = self.disco.peers.lock().unwrap().get(&client).cloned().ok_or_else(|| anyhow!("That device is no longer on the network."))?;
+        let sending_here = self
+            .host
+            .lock()
+            .unwrap()
+            .as_ref()
+            .is_some_and(|h| h.shared.streams.lock().unwrap().iter().any(|s| s.who.as_ref().is_some_and(|(w, _)| w.device == client)));
+        if !sending_here {
+            return Err(anyhow!("{} isn't sending to this device.", peer.advert.name));
+        }
+        *self.handover_error.lock().unwrap() = None;
+        *self.handover.lock().unwrap() = Some(Handover { to: client, name: peer.advert.name, since: Instant::now(), moved: None });
+        self.disco.me.lock().unwrap().handover = Some(client);
+        Ok(())
+    }
+
+    /// Run every tick. Three parts, one per device in a handover:
+    /// - the old listener waits for the new one, then stops and sends to it;
+    /// - the new listener, told by the beacon of the listener it sends to,
+    ///   stops sending and starts listening;
+    /// - every other sender moves its running streams to the new listener.
+    fn follow_handover(&self, peers: &[crate::discovery::Peer]) {
+        let peer = |id: u64| peers.iter().find(|p| p.advert.id == id);
+
+        // Old listener.
+        let mine = self.handover.lock().unwrap().as_ref().map(|h| (h.to, h.name.clone(), h.since, h.moved));
+        if let Some((to, name, since, moved)) = mine {
+            let listening = peer(to).is_some_and(|p| p.advert.hosting);
+            match moved {
+                None if listening => {
+                    self.prefs.lock().unwrap().was_hosting = false;
+                    self.close_hub();
+                    if let Some(h) = self.handover.lock().unwrap().as_mut() {
+                        h.moved = Some(Instant::now());
+                    }
+                }
+                None if since.elapsed() > HANDOVER_START => {
+                    *self.handover.lock().unwrap() = None;
+                    self.disco.me.lock().unwrap().handover = None;
+                    *self.handover_error.lock().unwrap() = Some(format!("{name} didn't take over. This device is still the listener."));
+                }
+                Some(at) => {
+                    let linked = self.link.lock().unwrap().as_ref().map(|l| l.host);
+                    if linked != Some(to) && listening {
+                        if linked.is_some() {
+                            self.disconnect();
+                        }
+                        let _ = self.connect(to);
+                    }
+                    if at.elapsed() > HANDOVER_ANNOUNCE {
+                        *self.handover.lock().unwrap() = None;
+                        self.disco.me.lock().unwrap().handover = None;
+                    }
+                }
+                None => {}
+            }
+            return;
+        }
+
+        // A sender: does the listener it sends to hand over?
+        let Some(host) = self.link.lock().unwrap().as_ref().map(|l| l.host) else { return };
+        let Some(to) = peer(host).and_then(|p| p.advert.handover) else { return };
+        if to == self.me.device {
+            // We are the new listener. Our audio plays here from now on.
+            self.disconnect();
+            self.prefs.lock().unwrap().last_host = None;
+            if let Err(e) = self.become_host() {
+                eprintln!("handover: {e}");
+            }
+        } else if peer(to).is_some_and(|p| p.advert.hosting) && !self.my_sources().contains(&to) {
+            self.move_link(to, peers);
+        }
+    }
+
+    /// Point the running streams at another listener without stopping them.
+    fn move_link(&self, to: u64, peers: &[crate::discovery::Peer]) {
+        let Some(p) = peers.iter().find(|p| p.advert.id == to) else { return };
+        let addr = SocketAddr::new(p.ip, p.advert.port);
+        {
+            let mut link = self.link.lock().unwrap();
+            let Some(l) = link.as_mut() else { return };
+            let hearing = l.hear.system || l.hear.mic;
+            if hearing {
+                self.send_want(l.addr, 0, Sends::default());
+            }
+            for r in [l.system.as_ref(), l.mic.as_ref()].into_iter().flatten() {
+                *r.shared.retarget.lock().unwrap() = Some(addr);
+            }
+            l.host = to;
+            l.name = p.advert.name.clone();
+            l.macos = p.advert.macos;
+            l.clients = p.advert.clients;
+            l.addr = addr;
+            if hearing {
+                let port = l.back.as_ref().map_or(0, |b| b.shared.port.load(Relaxed));
+                self.send_want(addr, port, l.hear);
+            }
+        }
+        self.prefs.lock().unwrap().last_host = Some(to);
+    }
+
     /// The user's explicit disconnect also stops auto-reconnect to that host.
     /// Forget first: disconnecting takes a moment (senders wind down), and a
     /// tick in between would otherwise reconnect straight away.
@@ -706,6 +836,12 @@ impl Engine {
         };
         let hosts: Vec<HostInfo> = peers.iter().filter(|p| p.advert.hosting).map(host_info).collect();
 
+        self.follow_handover(&peers);
+        if let Some(e) = self.handover_error.lock().unwrap().clone() {
+            error = Some(e);
+        }
+        let handing_over = self.handover.lock().unwrap().as_ref().filter(|h| h.moved.is_none()).map(|h| h.name.clone());
+
         // Reconnect to the last host as soon as it shows up.
         let (reconnect, last) = {
             let p = self.prefs.lock().unwrap();
@@ -811,6 +947,7 @@ impl Engine {
             devices,
             options: Options { reconnect, start_at_login, quiet_wifi, mute_speakers },
             error,
+            handing_over,
         }
     }
 

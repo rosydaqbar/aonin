@@ -2,6 +2,7 @@
   import { AudioLines, Download, Globe, Info, Lock, LogIn, Mic, Monitor, MonitorSmartphone, Network, Power, RefreshCw, SlidersHorizontal, VolumeX, Wifi } from '@lucide/svelte';
   import ClientRow from './ClientRow.svelte';
   import ComingSoon from './ComingSoon.svelte';
+  import Confirm from './Confirm.svelte';
   import Issues from './Issues.svelte';
   import StatusMark from './StatusMark.svelte';
   import Switch from './Switch.svelte';
@@ -24,6 +25,8 @@
   }
   let section = $state<Section>(readHash());
   let soon = $state(false);
+  /** The audio sender the user asked to make the listener, awaiting confirmation. */
+  let makeTarget = $state<{ id: string; name: string } | null>(null);
 
   function readHash(): Section {
     const h = (typeof location === 'undefined' ? '' : location.hash.slice(1)) as Section;
@@ -80,8 +83,10 @@
             <button class="btn" onclick={actions.stopHosting}>Stop listening</button>
           </div>
           {#if app.hosting.clients.length}
-            <div class="cols label"><span></span><span>Device</span><span>Level</span><span class="r">Latency</span><span>Volume</span><span></span></div>
-            {#each app.hosting.clients as row (row.id)}<ClientRow {row} wide lost={app.outputLost} />{/each}
+            <div class="cols label"><span></span><span>Device</span><span>Level</span><span class="r">Latency</span><span>Volume</span><span></span><span></span></div>
+            {#each app.hosting.clients as row (row.id)}
+              <ClientRow {row} wide lost={app.outputLost} onmake={app.handingOver ? undefined : () => (makeTarget = { id: row.id, name: row.name })} />
+            {/each}
           {:else}
             <p class="empty">Waiting for audio senders. Open Aonin on another device on this network and it will appear here.</p>
           {/if}
@@ -270,6 +275,16 @@
 </div>
 
 <ComingSoon bind:open={soon} />
+{#if makeTarget}
+  {@const t = makeTarget}
+  <Confirm
+    title="Make {t.name} the listener?"
+    body="Everyone's audio will play on {t.name}, and this {app.me.os === 'macos' ? 'Mac' : 'PC'} will send its audio there."
+    action="Make listener"
+    onconfirm={() => actions.handOver(t.id)}
+    onclose={() => (makeTarget = null)}
+  />
+{/if}
 
 <style>
   .win { height: 100vh; display: grid; grid-template-rows: 52px auto 1fr; background: var(--housing); }
@@ -310,7 +325,7 @@
   .titlebar .label { margin-left: auto; }
   .titlebar .label + .btn { margin-left: 0; }
   .titlebar h2 + .btn { margin-left: auto; }
-  .cols { display: grid; grid-template-columns: 8px minmax(180px, 1fr) 105px 64px 132px 72px; gap: 16px; padding-bottom: 6px; border-bottom: 1px solid var(--line); }
+  .cols { display: grid; grid-template-columns: 8px minmax(120px, 1fr) 105px 64px 100px 28px 124px; gap: 12px; padding-bottom: 6px; border-bottom: 1px solid var(--line); }
   .r { text-align: right; }
   .empty { color: var(--ink-2); padding: 14px 0; }
   .alert { margin-top: 16px; padding: 10px 12px; border-radius: 8px; background: var(--red-wash); }

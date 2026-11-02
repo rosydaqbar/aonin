@@ -45,6 +45,10 @@ enum Cmd {
         /// Output device (substring of its name). Default: system default.
         #[arg(long)]
         output: Option<String>,
+        /// Testing: hand the listener role to the first device sending here
+        /// after this many seconds, then keep reporting.
+        #[arg(long)]
+        hand_over_after: Option<u64>,
     },
     /// Join a host found on the network through the app engine.
     Join {
@@ -95,6 +99,12 @@ enum Cmd {
         /// Silence this computer's speakers while sending (the stream keeps the audio).
         #[arg(long)]
         mute_speakers: bool,
+        /// Testing: switch to this hub after --move-after seconds without
+        /// stopping capture, as a handover does.
+        #[arg(long, hide = true)]
+        move_to: Option<String>,
+        #[arg(long, default_value_t = 5, hide = true)]
+        move_after: u64,
     },
 }
 
@@ -108,12 +118,25 @@ fn main() -> Result<()> {
             println!("{:?}", c.get());
             Ok(())
         }
-        Cmd::Host { output } => {
+        Cmd::Host { output, hand_over_after } => {
             let engine = cli_engine(output);
             engine.become_host()?;
+            let start = std::time::Instant::now();
+            let mut handed = false;
             loop {
-                std::thread::sleep(std::time::Duration::from_secs(2));
-                println!("{}", engine.tick().summary());
+                std::thread::sleep(std::time::Duration::from_millis(250));
+                let snap = engine.tick();
+                if !handed
+                    && hand_over_after.is_some_and(|s| start.elapsed().as_secs() >= s)
+                    && let Some((id, name)) = snap.client_ids().into_iter().next()
+                {
+                    println!("-- hand over to {name}");
+                    engine.hand_over(aon::engine::parse_id(&id).unwrap())?;
+                    handed = true;
+                }
+                if start.elapsed().as_millis() % 2000 < 250 {
+                    println!("{:.1}s {}", start.elapsed().as_secs_f32(), snap.summary());
+                }
             }
         }
         Cmd::Join { name, hear_system, hear_mic, no_send, output, seconds, reconnect, disconnect_after } => {
@@ -145,14 +168,20 @@ fn main() -> Result<()> {
             }
             let start = std::time::Instant::now();
             let mut disconnected = false;
+            let mut last_print = start;
             while start.elapsed().as_secs() < seconds {
-                std::thread::sleep(std::time::Duration::from_secs(1));
+                std::thread::sleep(std::time::Duration::from_millis(100));
+                let snap = engine.tick();
+                if last_print.elapsed().as_secs() < 1 {
+                    continue;
+                }
+                last_print = std::time::Instant::now();
                 if !disconnected && disconnect_after.is_some_and(|d| start.elapsed().as_secs() >= d) {
                     println!("-- disconnect");
                     engine.forget_host();
                     disconnected = true;
                 }
-                println!("{}", engine.tick().summary());
+                println!("{:.1}s {}", start.elapsed().as_secs_f32(), snap.summary());
             }
             engine.shutdown();
             Ok(())
@@ -166,7 +195,7 @@ fn main() -> Result<()> {
             let follow = output.is_none();
             net::run_hub(port, || audio::start_output(output.as_deref()), follow, &net::HubShared::default(), true)
         }
-        Cmd::Send { hub, source, device, drop_percent, self_tone, quality, mute_speakers } => {
+        Cmd::Send { hub, source, device, drop_percent, self_tone, quality, mute_speakers, move_to, move_after } => {
             let hub = resolve(&hub)?;
             let _tone = self_tone.map(|out| audio::play_tone(Some(&out), 440.0, 0.01)).transpose()?;
             let (_stream, rx, rate) = audio::start_capture(source, device.as_deref(), mute_speakers)?;
@@ -179,7 +208,16 @@ fn main() -> Result<()> {
             };
             let quality = aon_core::protocol::Quality::from_name(&quality).ok_or_else(|| anyhow::anyhow!("quality must be highest, cd, balanced or saver"))?;
             let cfg = net::SendConfig { hub, who, source: kind, quality, drop_percent, verbose: true };
-            net::run_sender(cfg, rx, rate, &net::SendShared::default())
+            let shared = std::sync::Arc::new(net::SendShared::default());
+            if let Some(to) = move_to {
+                let (to, s) = (resolve(&to)?, shared.clone());
+                std::thread::spawn(move || {
+                    std::thread::sleep(std::time::Duration::from_secs(move_after));
+                    println!("-- moving to {to}");
+                    *s.retarget.lock().unwrap() = Some(to);
+                });
+            }
+            net::run_sender(cfg, rx, rate, &shared)
         }
     }
 }
