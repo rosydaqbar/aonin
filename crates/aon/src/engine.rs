@@ -510,6 +510,10 @@ impl Engine {
     /// Audio senders without the code are dropped when it turns private.
     pub fn set_private(&self, code: Option<String>) -> Result<()> {
         let code = code.map(|c| private::normalize_code(&c).ok_or_else(|| anyhow!("A code has 6 letters and numbers."))).transpose()?;
+        // Only a listener can be private; an audio sender has no such choice.
+        if self.host.lock().unwrap().is_none() {
+            return Err(anyhow!("Only the listener can be private."));
+        }
         if code.is_some() && self.handover.lock().unwrap().is_some() {
             return Err(anyhow!("Wait for the handover to finish."));
         }
