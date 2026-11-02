@@ -2,32 +2,34 @@
 
 Hear every computer on your desk through one pair of headphones.
 
-Aonin joins the audio of computers on the same local network into one output. One machine becomes the **host**; the others connect as **clients** and stream their system audio and/or microphone to it, and the host mixes everything and plays it on one device. It runs on **Windows and macOS** from the tray / menu bar.
+![Three computers send their audio over the local network to the listener, which mixes it into one pair of headphones](docs/images/how-it-works.webp)
+
+Aonin joins the audio of computers on the same local network into one output. One machine becomes the **listener**. The others join as **audio senders** and stream their system audio and/or microphone to it, and the listener mixes everything and plays it on one device. A listener can be private: it then shows a code, and only devices that type it can join. It runs on **Windows and macOS** from the tray / menu bar.
 
 - **Pure local network.** No servers, no accounts. Devices find each other on the LAN and nothing leaves it.
 - **Highest quality by default.** Uncompressed 24-bit / 48 kHz PCM, with lighter tiers (CD 16-bit, and Opus Balanced / Saver) for weak networks.
 - **Real time over Wi-Fi.** Typically 15–30 ms of buffering, with redundant packets and retransmits so Wi-Fi packet loss doesn't become dropouts.
 - **No drivers.** System audio is captured with WASAPI loopback on Windows and the Core Audio process tap on macOS 14.2+.
 
-> **Status:** early development. The engine and the host/client flow work; see [Roadmap](#roadmap) for what's still missing. There are no release builds yet.
+> **Status:** early development. The engine and the listener/audio sender flow work; see [Roadmap](#roadmap) for what's still missing. Installers are on [Releases](https://github.com/rosydaqbar/aonin/releases).
 
 ## How it works
 
 ```
  MacBook ──┐
- MacBook ──┼── Wi-Fi / Ethernet (UDP, LAN only) ──► Host ──► headphones / speakers
+ MacBook ──┼── Wi-Fi / Ethernet (UDP, LAN only) ──► Listener ──► headphones / speakers
  Laptop  ──┘
 ```
 
-- **Discovery:** every running Aonin broadcasts a small beacon on the LAN once a second, so hosts appear on their own.
+- **Discovery:** every running Aonin broadcasts a small beacon on the LAN once a second, so listeners appear on their own. Private listeners stay out of the list.
 - **Transport:** audio is cut into 2 ms blocks. Every packet also carries the previous block, so a single lost packet is recovered from the next one with no extra delay. Longer gaps are re-requested (NACK) and retransmitted, up to three times.
 - **Jitter buffer:** each incoming stream has an adaptive buffer that grows to cover the worst recent Wi-Fi stall and shrinks again while the network behaves. Clock drift between machines is corrected by resampling a few hundred ppm, not by dropping samples.
-- **No loops:** a device can't connect to a host whose audio already comes from that device (for example, a host that is itself a client of this machine), because the sound would bounce back and forth. Such hosts are shown but can't be joined.
+- **No loops:** a device can't join a listener whose audio already comes from that device (for example, a listener that is itself sending to this machine), because the sound would bounce back and forth. Such listeners are shown but can't be joined.
 
 ## Platform notes
 
 - **macOS** asks once for permission to record system audio and the microphone. Until it is granted, capture is silent.
-- **Windows Firewall** asks once to allow incoming connections the first time a machine hosts.
+- **Windows Firewall** asks once to allow incoming connections the first time a machine listens.
 - For the steadiest Wi-Fi on a Mac, AirDrop/Handoff (AWDL) can cause short stalls; the adaptive buffer absorbs them at the cost of a few ms.
 
 ## Installing
@@ -72,7 +74,7 @@ cargo run --release -p aon -- send 192.168.1.20 --source mic
 | Path | What |
 | --- | --- |
 | `crates/aon-core` | Platform-independent core: wire protocol, jitter buffer, resampler |
-| `crates/aon` | Audio I/O (cpal), UDP sender and hub, discovery, host/client engine, CLI |
+| `crates/aon` | Audio I/O (cpal), UDP sender and hub, discovery, listener and audio sender engine, CLI |
 | `app` | Desktop app: Tauri 2 shell (tray, popover, window) and the Svelte UI |
 | `app/icons-src` | Icon sources (SVG) |
 
@@ -84,10 +86,10 @@ Run the tests with `cargo test`.
 
 - [x] Highest-quality streaming with redundancy, retransmit and an adaptive jitter buffer
 - [x] System audio and mic capture on Windows and macOS, no drivers
-- [x] LAN discovery, host/client roles, loop detection, auto-reconnect
+- [x] LAN discovery, listener and audio sender roles, loop detection, auto-reconnect
 - [x] Tray / menu bar app with per-device volume, mute and live meters
 - [x] Quality tiers: Highest, CD (16-bit), Balanced and Saver (Opus)
-- [x] Two-way audio: hear the host's audio and mic on a client
+- [x] Two-way audio: hear the listener's audio and mic on an audio sender
 - [x] Never records Aonin's own playback (no echo, no loops)
 - [x] Pick audio devices; recover automatically when the output is unplugged or changes
 - [x] Open at login, and an optional "keep Wi-Fi steady" switch on macOS (turns off AWDL)
