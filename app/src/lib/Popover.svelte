@@ -166,13 +166,14 @@
         <span class="label" title="Output">{app.outputLost ? 'No output' : `To ${app.hosting.output}`}</span>
       </div>
       {#each app.hosting.clients as row (row.id)}
-        <ClientRow {row} lost={app.outputLost} onmake={app.handingOver || app.hosting.code ? undefined : () => (confirmId = confirmId === row.id ? null : row.id)} />
+        <ClientRow {row} lost={app.outputLost} making={confirmId === row.id} onmake={app.handingOver || app.hosting.code ? undefined : () => (confirmId = confirmId === row.id ? null : row.id)} />
         {#if confirmId === row.id}
-          <div class="confirm" role="group" aria-label="Make {row.name} the listener">
-            <p>Play everyone's audio on {row.name}? This device will send its audio there.</p>
+          <div class="confirm" role="group" aria-labelledby="make-{row.id}">
+            <p class="q" id="make-{row.id}">Make {row.name} the listener?</p>
+            <p class="label">Everyone's audio will play there, this {app.me.os === 'macos' ? 'Mac' : 'PC'} included.</p>
             <span class="actions">
               <button class="btn quiet" onclick={() => (confirmId = null)}>Cancel</button>
-              <button class="btn primary" onclick={() => { confirmId = null; actions.handOver(row.id); }}>Make listener</button>
+              <button class="btn go" onclick={() => { confirmId = null; actions.handOver(row.id); }}>Make listener</button>
             </span>
           </div>
         {/if}
@@ -292,9 +293,17 @@
   }
   .tip:hover .bubble, .info:focus-visible + .bubble { opacity: 1; visibility: visible; }
   @media (prefers-reduced-motion: reduce) { .bubble { transition: none; } }
-  .confirm { padding: 10px 0 12px; border-bottom: 1px solid var(--line); }
-  .confirm p { font-size: var(--size-s); line-height: 1.45; }
-  .confirm .actions { display: flex; justify-content: flex-end; gap: 6px; margin-top: 8px; }
+  .confirm {
+    margin: 0 0 10px;
+    padding: 10px 12px;
+    border-radius: 10px;
+    background: var(--recess);
+    border: 1px solid var(--line);
+  }
+  .confirm .q { font-weight: 600; }
+  .confirm .go { font-weight: 600; border-color: var(--ink-2); }
+  .confirm .label { margin-top: 2px; line-height: 1.45; }
+  .confirm .actions { display: flex; justify-content: flex-end; gap: 6px; margin-top: 10px; }
   .codechip {
     height: 24px;
     padding: 0 8px;

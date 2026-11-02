@@ -6,8 +6,8 @@
   import { actions } from './actions';
 
   /** `lost`: the host's output device is gone, so nothing is actually playing. */
-  /** `onmake`: offer to make this device the listener. */
-  let { row, wide = false, lost = false, onmake }: { row: ClientRow; wide?: boolean; lost?: boolean; onmake?: () => void } = $props();
+  /** `onmake`: offer to make this device the listener; `making`: that offer is open. */
+  let { row, wide = false, lost = false, onmake, making = false }: { row: ClientRow; wide?: boolean; lost?: boolean; onmake?: () => void; making?: boolean } = $props();
 
   let what = $derived(
     row.mark === 'connecting'
@@ -21,7 +21,7 @@
   let mark = $derived(lost ? 'connecting' : row.muted ? 'muted' : row.mark);
 </script>
 
-<div class="row" class:wide>
+<div class="row" class:wide class:open={making}>
   <StatusMark {mark} />
   <div class="who">
     <span class="name" title={row.name}>{row.name}</span>
@@ -56,7 +56,7 @@
   {#if wide}
     <button class="btn make" onclick={onmake} disabled={!onmake}><ArrowLeftRight size={13} strokeWidth={1.75} />Make listener</button>
   {:else}
-    <button class="icon" onclick={onmake} disabled={!onmake} title="Make listener" aria-label="Make {row.name} the listener"><ArrowLeftRight size={14} strokeWidth={1.75} /></button>
+    <button class="icon" class:active={making} onclick={onmake} disabled={!onmake} title="Make listener" aria-label="Make {row.name} the listener" aria-expanded={making}><ArrowLeftRight size={14} strokeWidth={1.75} /></button>
   {/if}
 </div>
 
@@ -74,6 +74,7 @@
     gap: 12px;
     min-height: 52px;
   }
+  .row.open { border-bottom-color: transparent; }
   .who { display: flex; flex-direction: column; min-width: 0; }
   .name { font-weight: 600; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
   .lat { text-align: right; }
@@ -90,6 +91,7 @@
   }
   .icon:hover:not(:disabled) { border-color: var(--ink-2); }
   .icon:disabled { opacity: 0.45; }
+  .icon.active { background: var(--ink); border-color: var(--ink); color: var(--housing); }
   .icon.on { background: var(--strip); border-color: var(--strip); color: var(--strip-ink); }
   .make { display: inline-flex; align-items: center; gap: 6px; padding: 0 12px; white-space: nowrap; justify-content: center; }
 </style>
