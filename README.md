@@ -17,11 +17,15 @@ Aonin runs on **Windows and macOS** from the system tray or menu bar. It support
 
 ## Aonin Pro
 
-Aonin is free. Aonin Pro adds private listeners and lets you transfer the listener role to another device. Android and iOS apps are planned.
+Aonin is free. **Aonin Pro** adds:
+
+- **Private listeners:** only devices with the listener's code can join.
+- **Make listener:** hand the listener role to another device.
+- **Android and iOS apps:** available when ready.
+
+One license covers 2 computers for life and includes one year of updates. Enter your license key in the app on the listener to unlock Pro.
 
 More on [lfg.ink/aonin](https://lfg.ink/aonin).
-
-This repository contains the free version's source code.
 
 ## How it works
 
@@ -108,18 +112,31 @@ Run the tests with `cargo test`.
 
 ## Roadmap
 
-- **Done**
-  - Real-time audio streaming on Windows and macOS without drivers
-  - Two-way audio
-  - Quality tiers
-  - Automatic updates
-  - Five languages
-  - Aonin Pro
-- **Next**
-  - Sign in to connect your own devices without a code
-  - Android and iOS apps
-  - Native macOS design
-  - Code-signed installers
+### Done
+
+- [x] Real-time audio streaming on Windows and macOS without drivers
+- [x] Two-way audio, audio quality options and per-device volume
+- [x] Automatic updates
+- [x] Five languages
+
+### V1
+
+- [x] Make listener (Pro)
+- [x] Private listeners (Pro)
+- [x] Aonin Pro license keys
+- [ ] Connect your devices by signing in, without a code
+
+### V1.1
+
+- [ ] Android and iOS apps
+
+### V1.2
+
+- [ ] Native macOS design
+
+### Later
+
+- [ ] Code-signed installers
 
 ## License
 
