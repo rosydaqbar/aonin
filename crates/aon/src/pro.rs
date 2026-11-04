@@ -9,6 +9,7 @@
 //! private listener with a code, being carried along when a listener turns
 //! private, and receiving a handover.
 
+use crate::license::License;
 use crate::private::Cipher;
 use anyhow::{Result, anyhow};
 use serde::Serialize;
@@ -32,6 +33,8 @@ pub enum Feature {
 
 pub trait Pro: Send + Sync {
     fn edition(&self) -> Edition;
+    /// The license entered on this device, checked already (see `license`).
+    fn set_license(&self, license: Option<License>);
     /// `Ok` when this device may use `feature`; the error says why not.
     fn allow(&self, feature: Feature) -> Result<()>;
     /// The listener side of a private session. `None` without Pro: the
@@ -56,6 +59,9 @@ impl Pro for Free {
     fn edition(&self) -> Edition {
         Edition::Free
     }
+
+    /// The free build only needs a license to fetch Aonin Pro.
+    fn set_license(&self, _license: Option<License>) {}
 
     fn allow(&self, feature: Feature) -> Result<()> {
         Err(needs_pro(feature))

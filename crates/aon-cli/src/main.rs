@@ -16,6 +16,9 @@ struct Cli {
 enum Cmd {
     /// List audio devices.
     Devices,
+    /// Testing: check an Aonin Pro license key.
+    #[command(hide = true)]
+    License { key: String },
     /// Testing: print what the OS is blocking (permission checks).
     #[command(hide = true)]
     Permissions,
@@ -127,6 +130,11 @@ fn main() -> Result<()> {
     aon::run_speaker_guard_if_asked();
     match Cli::parse().cmd {
         Cmd::Devices => audio::list_devices(),
+        Cmd::License { key } => {
+            let l = aon::license::verify(&key)?;
+            println!("valid: {} (id {}), issued {}, updates until {}", l.email, l.id, l.issued, l.updates_until);
+            Ok(())
+        }
         Cmd::Permissions => {
             let c = aon::permissions::Checker::start();
             std::thread::sleep(std::time::Duration::from_millis(1500));
@@ -277,7 +285,15 @@ fn cli_engine(output: Option<String>) -> std::sync::Arc<aon::engine::Engine> {
     let id = RandomState::new().hash_one(std::time::Instant::now()) | 1;
     let name = gethostname::gethostname().to_string_lossy().into_owned();
     let prefs = aon::engine::Prefs { reconnect: false, output, ..Default::default() };
-    aon::engine::Engine::new(id, name, prefs, aon_pro::new())
+    let engine = aon::engine::Engine::new(id, name, prefs, aon_pro::new());
+    // Testing Pro: AONIN_LICENSE=<key>.
+    if let Ok(key) = std::env::var("AONIN_LICENSE") {
+        match aon::license::verify(&key) {
+            Ok(l) => engine.set_license(Some(l)),
+            Err(e) => eprintln!("AONIN_LICENSE: {e}"),
+        }
+    }
+    engine
 }
 
 fn resolve(hub: &str) -> Result<SocketAddr> {

@@ -3,6 +3,8 @@
 //! the tray; Quit lives in the popover.
 
 use aon::engine::{self, DeviceRole, Engine, Prefs};
+use aon::license::License;
+use aon::pro::Edition;
 use aon_core::protocol::Source;
 use serde::{Deserialize, Serialize};
 use std::hash::{BuildHasher, RandomState};
@@ -50,6 +52,9 @@ struct Config {
     /// The code of `last_host` when it is private, to rejoin after a restart.
     #[serde(default)]
     last_code: Option<String>,
+    /// The Aonin Pro license key entered here.
+    #[serde(default)]
+    license: Option<String>,
 }
 
 fn config_path(app: &AppHandle) -> Option<PathBuf> {
@@ -78,8 +83,32 @@ fn save_config(app: &AppHandle, cfg: &Config) {
 type Eng<'a> = State<'a, Arc<Engine>>;
 
 /// A downloaded, signature-checked update waiting for "Restart to update".
+/// The flag is set when it is the switch from free to Aonin Pro.
 #[derive(Default)]
-struct Pending(std::sync::Mutex<Option<(Update, Vec<u8>)>>);
+struct Pending(std::sync::Mutex<Option<(Update, Vec<u8>, bool)>>);
+
+/// Where Aonin Pro updates come from. It answers only with a license key
+/// whose update period covers the build. Test builds point it elsewhere
+/// with AONIN_PRO_UPDATES.
+const PRO_UPDATES: &str = match option_env!("AONIN_PRO_UPDATES") {
+    Some(url) => url,
+    None => "https://pro.aonin.app/update/{{target}}/{{arch}}/{{current_version}}",
+};
+
+/// The updater for this device: GitHub for free, the Pro server (with the
+/// license) for Pro. `switch` also accepts the same version, for the move
+/// from free to Pro.
+fn updater(app: &AppHandle, pro_key: Option<&str>, switch: bool) -> Result<tauri_plugin_updater::Updater, String> {
+    let mut b = app.updater_builder();
+    if let Some(key) = pro_key {
+        let url = PRO_UPDATES.parse().map_err(err)?;
+        b = b.endpoints(vec![url]).map_err(err)?.header("Authorization", format!("License {key}")).map_err(err)?;
+    }
+    if switch {
+        b = b.version_comparator(|current, remote| remote.version >= current);
+    }
+    b.build().map_err(err)
+}
 
 const UPDATE_EVERY: Duration = Duration::from_secs(6 * 3600);
 
@@ -99,17 +128,57 @@ fn start_updater(app: AppHandle) {
 /// Ask GitHub for a newer release and download it. Returns the version that
 /// is ready to install, or `None` when this is the latest.
 async fn fetch_update(app: &AppHandle) -> Result<Option<String>, String> {
-    let Some(update) = app.updater().map_err(err)?.check().await.map_err(err)? else {
+    let pending = app.state::<Pending>();
+    // Waiting to restart into Aonin Pro: don't replace that with a free update.
+    if pending.0.lock().unwrap().as_ref().is_some_and(|(_, _, pro)| *pro) {
+        return Ok(None);
+    }
+    let pro = app.state::<Arc<Engine>>().edition() == Edition::Pro;
+    let key = if pro { load_config(app).license } else { None };
+    let Some(update) = updater(app, key.as_deref(), false)?.check().await.map_err(err)? else {
         return Ok(None);
     };
-    let pending = app.state::<Pending>();
-    if pending.0.lock().unwrap().as_ref().is_some_and(|(u, _)| u.version == update.version) {
+    if pending.0.lock().unwrap().as_ref().is_some_and(|(u, _, _)| u.version == update.version) {
         return Ok(Some(update.version));
     }
     let bytes = update.download(|_, _| {}, || {}).await.map_err(err)?;
     let version = update.version.clone();
-    *pending.0.lock().unwrap() = Some((update, bytes));
+    *pending.0.lock().unwrap() = Some((update, bytes, false));
     Ok(Some(version))
+}
+
+/// About → Aonin Pro: check the key and keep it. The engine uses it right
+/// away (Pro build); the free build then fetches Aonin Pro (`unlock_pro`).
+#[tauri::command]
+fn set_license(app: AppHandle, engine: Eng, key: String) -> Result<License, String> {
+    let license = aon::license::verify(&key).map_err(err)?;
+    let mut cfg = load_config(&app);
+    cfg.license = Some(key.split_whitespace().collect());
+    save_config(&app, &cfg);
+    engine.set_license(Some(license.clone()));
+    Ok(license)
+}
+
+#[tauri::command]
+fn clear_license(app: AppHandle, engine: Eng) {
+    let mut cfg = load_config(&app);
+    cfg.license = None;
+    save_config(&app, &cfg);
+    engine.set_license(None);
+}
+
+/// Free build with a license: download Aonin Pro of the same version. It
+/// waits for "Restart to finish" (`install_update`).
+#[tauri::command]
+async fn unlock_pro(app: AppHandle) -> Result<String, String> {
+    let key = load_config(&app).license.ok_or("Enter your license key first.")?;
+    let Some(update) = updater(&app, Some(&key), true)?.check().await.map_err(err)? else {
+        return Err("Aonin Pro isn't available for this version yet. Try again later.".into());
+    };
+    let bytes = update.download(|_, _| {}, || {}).await.map_err(|e| format!("Couldn't download Aonin Pro: {e}"))?;
+    let version = update.version.clone();
+    *app.state::<Pending>().0.lock().unwrap() = Some((update, bytes, true));
+    Ok(version)
 }
 
 /// About → Check for updates.
@@ -134,7 +203,7 @@ fn ask_local_network(engine: Eng) {
 /// Install the downloaded update and start the new version.
 #[tauri::command(async)]
 fn install_update(app: AppHandle, engine: Eng) -> Result<(), String> {
-    let Some((update, bytes)) = app.state::<Pending>().0.lock().unwrap().take() else {
+    let Some((update, bytes, _)) = app.state::<Pending>().0.lock().unwrap().take() else {
         return Err("No update is ready.".into());
     };
     // Stop streaming first: peers see a clean exit and muted speakers come back.
@@ -315,7 +384,12 @@ fn start_poller(app: AppHandle, engine: Arc<Engine>, mut cfg: Config) {
             let snap = engine.tick();
             let mut state = serde_json::to_value(&snap).unwrap_or_default();
             state["version"] = app.package_info().version.to_string().into();
-            state["update"] = app.state::<Pending>().0.lock().unwrap().as_ref().map(|(u, _)| u.version.clone()).into();
+            {
+                let pending = app.state::<Pending>();
+                let pending = pending.0.lock().unwrap();
+                state["update"] = pending.as_ref().filter(|(_, _, pro)| !pro).map(|(u, _, _)| u.version.clone()).into();
+                state["proReady"] = pending.as_ref().is_some_and(|(_, _, pro)| *pro).into();
+            }
             let _ = app.emit("state", &state);
             let s = engine.saved();
             let changed = s.last_host != cfg.last_host
@@ -459,6 +533,9 @@ pub fn run() {
                 last_code: cfg.last_code.clone(),
             };
             let engine = Engine::new(cfg.device, name, prefs, aon_pro::new());
+            if let Some(license) = cfg.license.as_deref().and_then(|k| aon::license::verify(k).ok()) {
+                engine.set_license(Some(license));
+            }
             // Pick up the role this device had when Aonin last ran.
             if cfg.was_hosting {
                 let _ = engine.become_host();
@@ -525,6 +602,9 @@ pub fn run() {
             set_reconnect,
             install_update,
             check_update,
+            set_license,
+            clear_license,
+            unlock_pro,
             fix_issue,
             ask_local_network
         ])

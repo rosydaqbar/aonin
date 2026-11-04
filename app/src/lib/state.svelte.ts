@@ -80,6 +80,13 @@ export interface AppState {
   /** Looking for the private listener with the code the user typed. */
   joining: boolean;
   joinError: string | null;
+  /** Which build this is, and whether its Pro features are unlocked. */
+  edition: 'free' | 'pro';
+  proUnlocked: boolean;
+  /** The Aonin Pro license entered here (already checked). */
+  license: null | { id: string; email: string; issued: string; updatesUntil: string };
+  /** Free build: Aonin Pro is downloaded and waits for a restart. */
+  proReady: boolean;
 }
 
 /** No 0/O or 1/I: a code is read off one screen and typed on another.
@@ -135,7 +142,13 @@ const base: AppState = {
   options: { reconnect: true, startAtLogin: true, quietWifi: false, muteSpeakers: true },
   version: '0.1.1',
   update: null,
+  edition: 'free',
+  proUnlocked: false,
+  license: null,
+  proReady: false,
 };
+
+const demoLicense = { id: 'a1b2c3', email: 'you@example.com', issued: '2026-11-04', updatesUntil: '2027-11-04' };
 
 const clients: ClientRow[] = [
   { id: 'a', name: "Studio MacBook Pro", os: 'macos', sends: { system: true, mic: true }, mark: 'live', latencyMs: 21.8, recovered: 0, level: 0.62, volume: 0.72, muted: false },
@@ -157,6 +170,9 @@ export const DEMOS: Record<string, Partial<AppState>> = {
   },
   private: { hosting: { name: 'Studio room', code: 'K7Q4MZ', output: 'USB DAC', clients: clients.slice(0, 2) } },
   waiting: { hosting: { name: 'PC-Studio', code: null, output: 'USB DAC', clients: [] } },
+  // Aonin Pro, unlocked; and the free build waiting to restart into Pro.
+  pro: { edition: 'pro', proUnlocked: true, license: demoLicense, hosting: { name: 'PC-Studio', code: null, output: 'USB DAC', clients } },
+  proready: { license: demoLicense, proReady: true },
   client: {
     update: '0.1.2',
     me: { name: 'Office MacBook', os: 'macos' },

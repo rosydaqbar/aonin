@@ -6,14 +6,15 @@
     hint,
     icon: Icon,
     disabled = false,
+    tag,
     onchange,
-  }: { checked?: boolean; label: string; hint?: string; icon?: Component<{ size?: number; strokeWidth?: number }>; disabled?: boolean; onchange?: (checked: boolean) => void } = $props();
+  }: { checked?: boolean; label: string; hint?: string; icon?: Component<{ size?: number; strokeWidth?: number }>; disabled?: boolean; tag?: string; onchange?: (checked: boolean) => void } = $props();
 </script>
 
 <label class="switch" class:disabled>
   {#if Icon}<span class="icon" aria-hidden="true"><Icon size={16} strokeWidth={1.75} /></span>{/if}
   <span class="text">
-    <span>{label}</span>
+    <span class="title">{label}{#if tag}<span class="pro-tag">{tag}</span>{/if}</span>
     {#if hint}<span class="label">{hint}</span>{/if}
   </span>
   <input type="checkbox" role="switch" bind:checked {disabled} onchange={() => onchange?.(checked)} />
@@ -30,6 +31,7 @@
   }
   .icon { display: grid; place-items: center; width: 28px; height: 28px; border-radius: 7px; background: var(--recess); color: var(--ink-2); flex: none; align-self: flex-start; margin-top: 12px; }
   .text { flex: 1; display: flex; flex-direction: column; gap: 1px; min-width: 0; }
+  .title { display: flex; align-items: center; gap: 6px; }
   input { position: absolute; opacity: 0; width: 1px; height: 1px; }
   .track {
     width: 34px;

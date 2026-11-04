@@ -7,7 +7,8 @@
 
   /** `lost`: the host's output device is gone, so nothing is actually playing. */
   /** `onmake`: offer to make this device the listener; `making`: that offer is open. */
-  let { row, wide = false, lost = false, onmake, making = false }: { row: ClientRow; wide?: boolean; lost?: boolean; onmake?: () => void; making?: boolean } = $props();
+  /** `locked`: Make listener needs Aonin Pro here; `onmake` then leads to it. */
+  let { row, wide = false, lost = false, onmake, making = false, locked = false }: { row: ClientRow; wide?: boolean; lost?: boolean; onmake?: () => void; making?: boolean; locked?: boolean } = $props();
 
   let what = $derived(
     row.mark === 'connecting'
@@ -54,9 +55,9 @@
       {#if row.muted}<VolumeX size={15} strokeWidth={1.75} />{:else}<Volume2 size={15} strokeWidth={1.75} />{/if}
     </button>
   {#if wide}
-    <button class="btn make" onclick={onmake} disabled={!onmake}><ArrowLeftRight size={13} strokeWidth={1.75} />Make listener</button>
+    <button class="btn make" onclick={onmake} disabled={!onmake}><ArrowLeftRight size={13} strokeWidth={1.75} />Make listener{#if locked}<span class="pro-tag">Pro</span>{/if}</button>
   {:else}
-    <button class="icon" class:active={making} onclick={onmake} disabled={!onmake} title="Make listener" aria-label="Make {row.name} the listener" aria-expanded={making}><ArrowLeftRight size={14} strokeWidth={1.75} /></button>
+    <button class="icon" class:active={making} onclick={onmake} disabled={!onmake} title={locked ? 'Make listener (Aonin Pro)' : 'Make listener'} aria-label={locked ? `Make ${row.name} the listener, needs Aonin Pro` : `Make ${row.name} the listener`} aria-expanded={making}><ArrowLeftRight size={14} strokeWidth={1.75} /></button>
   {/if}
 </div>
 

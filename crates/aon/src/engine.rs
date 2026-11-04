@@ -9,6 +9,7 @@ use crate::audio;
 use crate::discovery::{Advert, Discovery};
 use crate::net::{self, HubShared, Identity, PrivateHub, SendConfig, SendShared};
 use crate::private::{self, Cipher, Pairing, Upgrade};
+use crate::license::License;
 use crate::pro::{Edition, Feature, Pro};
 use anyhow::{Result, anyhow};
 use aon_core::protocol::{self, DEFAULT_PORT, Os, Quality, Source};
@@ -167,6 +168,8 @@ pub struct Engine {
     me: Identity,
     /// What this edition unlocks (see `pro`).
     pro: Arc<dyn Pro>,
+    /// The Aonin Pro license entered here, if any.
+    license: Mutex<Option<License>>,
     disco: Arc<Discovery>,
     host: Mutex<Option<HostRun>>,
     link: Mutex<Option<LinkRun>>,
@@ -216,6 +219,9 @@ pub struct Snapshot {
     joining: bool,
     join_error: Option<String>,
     edition: Edition,
+    /// Pro features work here: the Pro build with a license that covers it.
+    pro_unlocked: bool,
+    license: Option<License>,
 }
 
 #[derive(Serialize)]
@@ -395,6 +401,7 @@ impl Engine {
         Arc::new(Self {
             me: Identity { device, name, os },
             pro,
+            license: Mutex::new(None),
             disco,
             host: Mutex::new(None),
             link: Mutex::new(None),
@@ -417,6 +424,18 @@ impl Engine {
             join_error: Mutex::new(None),
             last_rejoin: Mutex::new(None),
         })
+    }
+
+    /// Use `license` (already checked) from now on, or none.
+    pub fn set_license(&self, license: Option<License>) {
+        self.pro.set_license(license.clone());
+        *self.license.lock().unwrap() = license;
+        // A private listener can let people in now (or not any more).
+        self.apply_private();
+    }
+
+    pub fn edition(&self) -> Edition {
+        self.pro.edition()
     }
 
     pub fn last_host(&self) -> Option<u64> {
@@ -1346,6 +1365,8 @@ impl Engine {
             joining,
             join_error,
             edition: self.pro.edition(),
+            pro_unlocked: self.pro.allow(Feature::MakePrivate).is_ok(),
+            license: self.license.lock().unwrap().clone(),
         }
     }
 

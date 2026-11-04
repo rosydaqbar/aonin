@@ -4,6 +4,7 @@
 pub mod audio;
 pub mod discovery;
 pub mod engine;
+pub mod license;
 pub mod net;
 pub mod permissions;
 pub mod private;

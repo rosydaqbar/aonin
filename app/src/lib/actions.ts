@@ -115,6 +115,33 @@ export const actions = {
     const { openUrl } = await import('@tauri-apps/plugin-opener');
     await openUrl(url);
   },
+  /** About → Aonin Pro: check and keep the key. Throws with the reason. */
+  async setLicense(key: string) {
+    if (!inTauri) {
+      if (!key.trim().startsWith('AONIN-PRO-')) throw new Error("That license key isn't valid. Check it and try again.");
+      app.license = { id: 'demo', email: 'you@example.com', issued: '2026-11-04', updatesUntil: '2027-11-04' };
+      if (app.edition === 'pro') app.proUnlocked = true;
+      return;
+    }
+    const { invoke } = await import('@tauri-apps/api/core');
+    await invoke('set_license', { key });
+  },
+  async clearLicense() {
+    if (!(await call('clear_license'))) {
+      app.license = null;
+      app.proUnlocked = false;
+    }
+  },
+  /** Free build: download Aonin Pro; throws with the reason. */
+  async unlockPro() {
+    if (!inTauri) {
+      await new Promise((r) => setTimeout(r, 1200));
+      app.proReady = true;
+      return;
+    }
+    const { invoke } = await import('@tauri-apps/api/core');
+    await invoke('unlock_pro');
+  },
   async installUpdate() {
     await call('install_update');
   },

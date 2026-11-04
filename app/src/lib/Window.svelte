@@ -1,5 +1,5 @@
 <script lang="ts">
-  import { AudioLines, Copy, Download, Globe, Info, Lock, LogIn, Mic, Monitor, MonitorSmartphone, Network, Power, RefreshCw, SlidersHorizontal, VolumeX, Wifi } from '@lucide/svelte';
+  import { AudioLines, BadgeCheck, Copy, Download, Globe, Info, KeyRound, Lock, LogIn, Mic, Monitor, MonitorSmartphone, Network, Power, RefreshCw, SlidersHorizontal, VolumeX, Wifi } from '@lucide/svelte';
   import ClientRow from './ClientRow.svelte';
   import Confirm from './Confirm.svelte';
   import Issues from './Issues.svelte';
@@ -25,6 +25,31 @@
       check = 'failed';
     }
   }
+  // About → Aonin Pro.
+  let licenseKey = $state('');
+  let pro = $state<'idle' | 'checking' | 'downloading'>('idle');
+  let proError = $state<string | null>(null);
+  async function unlock(e?: SubmitEvent) {
+    e?.preventDefault();
+    proError = null;
+    try {
+      if (!app.license) {
+        pro = 'checking';
+        await actions.setLicense(licenseKey);
+        licenseKey = '';
+      }
+      if (app.edition === 'free') {
+        pro = 'downloading';
+        await actions.unlockPro();
+      }
+    } catch (err) {
+      proError = String(err).replace(/^Error: /, '');
+    }
+    pro = 'idle';
+  }
+  const fmtDate = (d: string) => new Date(d + 'T00:00:00').toLocaleDateString(undefined, { day: 'numeric', month: 'short', year: 'numeric' });
+  /** Make private / Make listener when Pro isn't unlocked: go to About. */
+  const getPro = () => (location.hash = 'about');
   let section = $state<Section>(readHash());
   /** The Become listener or Join form, shown as a dialog. */
   let form = $state<'listen' | 'join' | null>(null);
@@ -83,7 +108,11 @@
         <span class="title">Visible to public</span>
         <span class="label">Anyone on this network can join.</span>
       </span>
-      <button class="btn" onclick={makePrivate}><Lock size={14} strokeWidth={1.75} />Make private</button>
+      {#if app.proUnlocked}
+        <button class="btn" onclick={makePrivate}><Lock size={14} strokeWidth={1.75} />Make private</button>
+      {:else}
+        <button class="btn" onclick={getPro}><Lock size={14} strokeWidth={1.75} />Make private<span class="pro-tag">Pro</span></button>
+      {/if}
     </div>
   {/if}
 
@@ -115,7 +144,7 @@
           {#if app.hosting.clients.length}
             <div class="cols label"><span></span><span>Device</span><span>Level</span><span class="r">Latency</span><span>Volume</span><span></span><span></span></div>
             {#each app.hosting.clients as row (row.id)}
-              <ClientRow {row} wide lost={app.outputLost} onmake={app.handingOver || app.hosting.code ? undefined : () => (makeTarget = { id: row.id, name: row.name })} />
+              <ClientRow {row} wide lost={app.outputLost} locked={!app.proUnlocked} onmake={app.handingOver || app.hosting.code ? undefined : !app.proUnlocked ? getPro : () => (makeTarget = { id: row.id, name: row.name })} />
             {/each}
           {:else}
             <p class="empty">{app.hosting.code ? "Waiting for audio senders. On another device, open Aonin, choose Join and type the code above." : "Waiting for audio senders. Open Aonin on another device on this network and it will appear here."}</p>
@@ -296,6 +325,53 @@
           {/if}
         </div>
 
+        <div class="titlebar"><h2>Aonin Pro</h2></div>
+        {#if app.proUnlocked && app.license}
+          <div class="update">
+            <span class="icon" aria-hidden="true"><BadgeCheck size={16} strokeWidth={1.75} /></span>
+            <span class="text">
+              <span>Aonin Pro is unlocked</span>
+              <span class="label">{app.license.email} · updates until {fmtDate(app.license.updatesUntil)}</span>
+            </span>
+            <button class="btn quiet" onclick={actions.clearLicense}>Remove key</button>
+          </div>
+        {:else if app.proReady}
+          <div class="update">
+            <span class="icon" aria-hidden="true"><BadgeCheck size={16} strokeWidth={1.75} /></span>
+            <span class="text">
+              <span>Aonin Pro is ready</span>
+              <span class="label">Restart Aonin to finish. Your settings stay.</span>
+            </span>
+            <button class="btn primary" onclick={actions.installUpdate}>Restart to finish</button>
+          </div>
+        {:else if app.license}
+          <div class="update">
+            <span class="icon" aria-hidden="true"><KeyRound size={16} strokeWidth={1.75} /></span>
+            <span class="text">
+              {#if pro === 'downloading'}
+                <span>Downloading Aonin Pro…</span>
+                <span class="label">{app.license.email} · this takes a moment.</span>
+              {:else if app.edition === 'pro'}
+                <span>Your Pro updates ended on {fmtDate(app.license.updatesUntil)}</span>
+                <span class="label">Renew to use Pro in this version.</span>
+              {:else}
+                <span>License for {app.license.email}</span>
+                <span class="label" class:bad={!!proError}>{proError ?? 'Download Aonin Pro to unlock its features.'}</span>
+              {/if}
+            </span>
+            {#if app.edition === 'free'}
+              <button class="btn primary" onclick={() => unlock()} disabled={pro !== 'idle'}>{proError ? 'Try again' : 'Get Aonin Pro'}</button>
+            {/if}
+          </div>
+        {:else}
+          <p class="overview">Pro lets this device make a listener private with a code, and hand the listener role to another device with Make listener. One license, yours for life, with a year of updates.</p>
+          <form class="license" onsubmit={unlock}>
+            <input class="field" bind:value={licenseKey} placeholder="Paste your license key" aria-label="License key" autocomplete="off" spellcheck="false" />
+            <button class="btn primary" disabled={!licenseKey.trim() || pro !== 'idle'}>{pro === 'checking' ? 'Checking…' : 'Unlock'}</button>
+          </form>
+          {#if proError}<p class="label bad">{proError}</p>{/if}
+        {/if}
+
         <div class="titlebar"><h2>License</h2></div>
         <p class="legal">© 2026 Rosyd Aqbar. Aonin is free software under the GNU General Public License, version 3 or later. It comes with no warranty.</p>
         <p class="links">
@@ -401,6 +477,8 @@
   .links { display: flex; gap: 18px; margin-top: 10px; }
   .link { background: none; border: 0; padding: 0; font: inherit; color: var(--ink); text-decoration: underline; text-underline-offset: 3px; cursor: pointer; }
   .update { display: flex; align-items: center; gap: 12px; min-height: 52px; border-bottom: 1px solid var(--line); }
+  .license { display: flex; gap: 8px; margin-top: 4px; }
+  .license .field { flex: 1; min-width: 0; font-family: var(--mono, ui-monospace, monospace); font-size: 12px; }
   .update .icon { display: grid; place-items: center; width: 28px; height: 28px; border-radius: 7px; background: var(--recess); color: var(--ink-2); flex: none; }
   .update .text { flex: 1; display: flex; flex-direction: column; gap: 1px; min-width: 0; }
   .solo { display: flex; flex-direction: column; align-items: flex-start; gap: 14px; padding: 18px 0; }
