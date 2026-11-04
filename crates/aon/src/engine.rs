@@ -514,7 +514,15 @@ impl Engine {
     }
 
     pub fn become_host(&self) -> Result<()> {
-        self.prefs.lock().unwrap().was_hosting = true;
+        {
+            let mut p = self.prefs.lock().unwrap();
+            p.was_hosting = true;
+            // A private listener saved by a build where private was free:
+            // without Pro nobody could join it, so it comes back public.
+            if p.private_code.is_some() && self.pro.allow(Feature::MakePrivate).is_err() {
+                p.private_code = None;
+            }
+        }
         {
             let mut host = self.host.lock().unwrap();
             if host.is_none() {
@@ -1425,6 +1433,18 @@ mod tests {
         let e = engine.hand_over(9).unwrap_err().to_string();
         assert!(e.contains("Aonin Pro"), "{e}");
         assert_eq!(engine.pro.edition(), Edition::Free);
+        engine.shutdown();
+    }
+
+    /// A private listener saved by 0.1.x comes back public on the free
+    /// build, where nobody could join it with the code.
+    #[test]
+    fn saved_private_listener_comes_back_public_without_pro() {
+        let prefs = Prefs { reconnect: false, was_hosting: true, private_code: Some("K7Q4MZ".into()), ..Default::default() };
+        let engine = Engine::new(4, "test".into(), prefs, Arc::new(crate::pro::Free));
+        engine.become_host().unwrap();
+        assert!(engine.saved().private_code.is_none(), "the code is dropped");
+        assert!(engine.was_hosting(), "it still listens, publicly");
         engine.shutdown();
     }
 
