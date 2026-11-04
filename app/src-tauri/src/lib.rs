@@ -481,7 +481,7 @@ pub fn run() {
             app.set_activation_policy(tauri::ActivationPolicy::Accessory);
             // The first time, show the window so Aonin doesn't vanish into
             // the tray. After that it starts quietly.
-            if first_run && let Some(win) = handle.get_webview_window(MAIN) {
+            if first_run && let Some(win) = app.get_webview_window(MAIN) {
                 let _ = win.center();
                 let _ = win.show();
                 let _ = win.set_focus();
