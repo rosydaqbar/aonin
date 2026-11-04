@@ -1,6 +1,6 @@
 [package]
 name = "aonin"
-version = "0.1.9"
+version = "0.2.1"
 description = "Highest-quality real-time audio over the local network"
 authors = ["Aonin"]
 edition = "2024"
