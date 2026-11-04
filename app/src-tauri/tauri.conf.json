@@ -34,6 +34,7 @@
     "category": "Utility",
     "macOS": {
       "minimumSystemVersion": "14.2",
+      "signingIdentity": "-",
       "infoPlist": "Info.plist"
     },
     "windows": {
