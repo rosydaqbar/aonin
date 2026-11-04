@@ -34,8 +34,7 @@
   {#if app.proUnlocked}
     <Switch icon={Lock} label="Make private" hint="Only devices with the code can join. It won't show up for anyone else." bind:checked={priv} />
   {:else}
-    <Switch icon={Lock} label="Make private" tag="Pro" hint="Only devices with the code can join. Needs Aonin Pro." disabled />
-    <button type="button" class="link getpro" onclick={() => actions.openWindow('about')}>Get Aonin Pro</button>
+    <Switch icon={Lock} label="Make private" tag="Pro" hint="Only devices with the code can join. It won't show up for anyone else." onlocked={() => actions.getPro()} />
   {/if}
   {#if priv}
     <div class="codebox">
@@ -60,5 +59,4 @@
   .codebox .text { flex: 1; display: flex; flex-direction: column; gap: 4px; }
   .big { font-size: 22px; user-select: text; cursor: text; }
   .actions { display: flex; justify-content: flex-end; gap: 6px; margin-top: 14px; }
-  .getpro { align-self: flex-start; margin-top: 8px; background: none; border: 0; padding: 0; font: inherit; color: var(--ink); text-decoration: underline; text-underline-offset: 3px; cursor: pointer; }
 </style>

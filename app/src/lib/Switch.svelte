@@ -8,7 +8,8 @@
     disabled = false,
     tag,
     onchange,
-  }: { checked?: boolean; label: string; hint?: string; icon?: Component<{ size?: number; strokeWidth?: number }>; disabled?: boolean; tag?: string; onchange?: (checked: boolean) => void } = $props();
+    onlocked,
+  }: { checked?: boolean; label: string; hint?: string; icon?: Component<{ size?: number; strokeWidth?: number }>; disabled?: boolean; tag?: string; onchange?: (checked: boolean) => void; onlocked?: () => void } = $props();
 </script>
 
 <label class="switch" class:disabled>
@@ -17,7 +18,7 @@
     <span class="title">{label}{#if tag}<span class="pro-tag">{tag}</span>{/if}</span>
     {#if hint}<span class="label">{hint}</span>{/if}
   </span>
-  <input type="checkbox" role="switch" bind:checked {disabled} onchange={() => onchange?.(checked)} />
+  <input type="checkbox" role="switch" bind:checked {disabled} onclick={(e) => { if (onlocked) { e.preventDefault(); onlocked(); } }} onchange={() => onchange?.(checked)} />
   <span class="track" aria-hidden="true"><span class="knob"></span></span>
 </label>
 

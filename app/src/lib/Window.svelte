@@ -1,15 +1,18 @@
 <script lang="ts">
-  import { AudioLines, BadgeCheck, Copy, Download, Globe, Info, KeyRound, Lock, LogIn, Mic, Monitor, MonitorSmartphone, Network, Power, RefreshCw, SlidersHorizontal, VolumeX, Wifi } from '@lucide/svelte';
+  import { AudioLines, Copy, Download, Globe, Info, Lock, LogIn, Mic, Monitor, MonitorSmartphone, Network, Power, RefreshCw, SlidersHorizontal, Sparkles, VolumeX, Wifi } from '@lucide/svelte';
   import ClientRow from './ClientRow.svelte';
+  import EditionBadge from './EditionBadge.svelte';
   import Confirm from './Confirm.svelte';
   import Issues from './Issues.svelte';
   import JoinForm from './JoinForm.svelte';
   import ListenForm from './ListenForm.svelte';
   import Modal from './Modal.svelte';
+  import ProFeatures from './ProFeatures.svelte';
+  import ProModal from './ProModal.svelte';
   import StatusMark from './StatusMark.svelte';
   import Switch from './Switch.svelte';
   import { actions, type Section } from './actions';
-  import { app, fmtCode, fmtMs, localNet, newCode, QUALITY, roleLine, type Quality } from './state.svelte';
+  import { app, fmtCode, fmtMs, localNet, newCode, PRO_LINKS, proModal, QUALITY, roleLine, type Quality } from './state.svelte';
 
   const sections: Section[] = ['devices', 'audio', 'network', 'advanced', 'about'];
   const sectionIcons = { devices: MonitorSmartphone, audio: AudioLines, network: Network, advanced: SlidersHorizontal, about: Info };
@@ -25,32 +28,18 @@
       check = 'failed';
     }
   }
-  // About → Aonin Pro.
-  let licenseKey = $state('');
-  let pro = $state<'idle' | 'checking' | 'downloading'>('idle');
-  let proError = $state<string | null>(null);
-  async function unlock(e?: SubmitEvent) {
-    e?.preventDefault();
-    proError = null;
-    try {
-      if (!app.license) {
-        pro = 'checking';
-        await actions.setLicense(licenseKey);
-        licenseKey = '';
-      }
-      if (app.edition === 'free') {
-        pro = 'downloading';
-        await actions.unlockPro();
-      }
-    } catch (err) {
-      proError = String(err).replace(/^Error: /, '');
-    }
-    pro = 'idle';
-  }
   const fmtDate = (d: string) => new Date(d + 'T00:00:00').toLocaleDateString(undefined, { day: 'numeric', month: 'short', year: 'numeric' });
-  /** Make private / Make listener when Pro isn't unlocked: go to About. */
-  const getPro = () => (location.hash = 'about');
+  /** Make private / Make listener when Pro isn't unlocked: the Unlock Pro dialog. */
+  const getPro = () => actions.getPro();
   let section = $state<Section>(readHash());
+  /** #pro (from the tray) opens the Unlock Pro dialog over the current section. */
+  function onHash() {
+    if (location.hash === '#pro') {
+      history.replaceState(null, '', '#' + section);
+      proModal.step = 'offer';
+    } else section = readHash();
+  }
+  $effect(onHash);
   /** The Become listener or Join form, shown as a dialog. */
   let form = $state<'listen' | 'join' | null>(null);
   $effect(() => {
@@ -80,12 +69,13 @@
   let others = $derived(app.hosts.filter((h) => h.id !== app.link?.host.id));
 </script>
 
-<svelte:window onhashchange={() => (section = readHash())} />
+<svelte:window onhashchange={onHash} />
 
 <div class="win">
   <header class="strip">
     <span class="brand">Aonin</span>
     <span class="me">{app.hosting?.name ?? app.me.name} · {app.me.os === 'macos' ? 'macOS' : 'Windows'}</span>
+    <EditionBadge />
     <span class="role"><i style:background={dot}></i>{roleLine(app)}</span>
   </header>
 
@@ -122,6 +112,9 @@
         {@const Icon = sectionIcons[s]}
         <a href="#{s}" aria-current={section === s ? 'page' : undefined}><Icon size={15} strokeWidth={1.75} aria-hidden="true" />{s[0].toUpperCase() + s.slice(1)}</a>
       {/each}
+      {#if !app.proUnlocked}
+        <button class="getpro" onclick={() => actions.getPro()}><Sparkles size={15} strokeWidth={1.75} aria-hidden="true" />Get Pro</button>
+      {/if}
       <button class="quit" onclick={actions.quit}><Power size={14} strokeWidth={1.75} />Quit Aonin</button>
     </nav>
 
@@ -332,51 +325,54 @@
         </div>
 
         <div class="titlebar"><h2>Aonin Pro</h2></div>
-        {#if app.proUnlocked && app.license}
-          <div class="update">
-            <span class="icon" aria-hidden="true"><BadgeCheck size={16} strokeWidth={1.75} /></span>
-            <span class="text">
-              <span>Aonin Pro is unlocked</span>
-              <span class="label">License {app.license.id} · updates until {fmtDate(app.license.updatesUntil)}</span>
-            </span>
-            <button class="btn quiet" onclick={actions.clearLicense}>Remove key</button>
-          </div>
-        {:else if app.proReady}
-          <div class="update">
-            <span class="icon" aria-hidden="true"><BadgeCheck size={16} strokeWidth={1.75} /></span>
-            <span class="text">
-              <span>Aonin Pro is ready</span>
-              <span class="label">Restart Aonin to finish. Your settings stay.</span>
-            </span>
-            <button class="btn primary" onclick={actions.installUpdate}>Restart to finish</button>
-          </div>
-        {:else if app.license}
-          <div class="update">
-            <span class="icon" aria-hidden="true"><KeyRound size={16} strokeWidth={1.75} /></span>
-            <span class="text">
-              {#if pro === 'downloading'}
-                <span>Downloading Aonin Pro…</span>
-                <span class="label">License {app.license.id} · this takes a moment.</span>
-              {:else if app.edition === 'pro'}
-                <span>Your Pro updates ended on {fmtDate(app.license.updatesUntil)}</span>
+        <div class="procard">
+          {#if app.proUnlocked && app.license}
+            <div class="prohead">
+              <span class="pro-tag xl">Pro</span>
+              <span class="text">
+                <span class="strong">Aonin Pro is unlocked</span>
+                <span class="label">License {app.license.id} · updates until {fmtDate(app.license.updatesUntil)}</span>
+              </span>
+              <button class="btn quiet" onclick={actions.clearLicense}>Remove key</button>
+            </div>
+          {:else if app.proReady}
+            <div class="prohead">
+              <span class="pro-tag xl">Pro</span>
+              <span class="text">
+                <span class="strong">Aonin Pro is ready</span>
+                <span class="label">Restart Aonin to finish. Your settings stay.</span>
+              </span>
+              <button class="btn primary" onclick={actions.installUpdate}>Restart to finish</button>
+            </div>
+          {:else if app.license && app.edition === 'pro'}
+            <div class="prohead">
+              <span class="pro-tag xl">Pro</span>
+              <span class="text">
+                <span class="strong">Your Pro updates ended on {fmtDate(app.license.updatesUntil)}</span>
                 <span class="label">Renew to use Pro in this version.</span>
+              </span>
+              <button class="btn primary" onclick={() => actions.openUrl(PRO_LINKS.buy)}>Renew</button>
+            </div>
+          {:else}
+            <div class="prohead">
+              <span class="pro-tag xl">Pro</span>
+              <span class="text">
+                <span class="strong">Unlock Pro features</span>
+                <span class="label">One license, yours for life, with a year of updates.</span>
+              </span>
+            </div>
+            <ProFeatures />
+            <div class="proactions">
+              {#if app.license}
+                <button class="btn primary" onclick={() => actions.getPro('key')}>Download Aonin Pro</button>
+                <span class="label">License {app.license.id}</span>
               {:else}
-                <span>License {app.license.id}</span>
-                <span class="label" class:bad={!!proError}>{proError ?? 'Download Aonin Pro to unlock its features.'}</span>
+                <button class="btn primary" onclick={() => actions.openUrl(PRO_LINKS.buy)}>Purchase</button>
+                <button class="btn" onclick={() => actions.getPro('key')}>Enter key</button>
               {/if}
-            </span>
-            {#if app.edition === 'free'}
-              <button class="btn primary" onclick={() => unlock()} disabled={pro !== 'idle'}>{proError ? 'Try again' : 'Get Aonin Pro'}</button>
-            {/if}
-          </div>
-        {:else}
-          <p class="overview">Pro lets this device make a listener private with a code, and hand the listener role to another device with Make listener. One license, yours for life, with a year of updates.</p>
-          <form class="license" onsubmit={unlock}>
-            <input class="field" bind:value={licenseKey} placeholder="Paste your license key" aria-label="License key" autocomplete="off" spellcheck="false" />
-            <button class="btn primary" disabled={!licenseKey.trim() || pro !== 'idle'}>{pro === 'checking' ? 'Checking…' : 'Unlock'}</button>
-          </form>
-          {#if proError}<p class="label bad">{proError}</p>{/if}
-        {/if}
+            </div>
+          {/if}
+        </div>
 
         <div class="titlebar"><h2>License</h2></div>
         <p class="legal">© 2026 Rosyd Aqbar. Aonin is free software under the GNU General Public License, version 3 or later. It comes with no warranty.</p>
@@ -414,6 +410,9 @@
     {/if}
   </Modal>
 {/if}
+{#if proModal.step}
+  <ProModal />
+{/if}
 {#if makeTarget}
   {@const t = makeTarget}
   <Confirm
@@ -449,6 +448,14 @@
   nav a[aria-current='page'] :global(svg) { color: var(--ink); }
   nav a:hover { color: var(--ink); background: color-mix(in srgb, var(--recess) 50%, transparent); }
   nav a[aria-current='page'] { background: var(--raised); font-weight: 700; box-shadow: 0 1px 2px rgb(0 0 0 / 0.08); }
+  .getpro { display: flex; align-items: center; gap: 10px; margin-top: 6px; padding: 8px 10px; border: 0; border-radius: 6px; background: transparent; color: var(--ink); font: inherit; text-align: left; cursor: pointer; }
+  .getpro :global(svg) { color: var(--orange); flex: none; }
+  .getpro:hover { background: color-mix(in srgb, var(--recess) 50%, transparent); }
+  .procard { display: flex; flex-direction: column; gap: 14px; max-width: 560px; padding: 16px 18px; border: 1px solid var(--line); border-radius: 12px; background: var(--raised); box-shadow: 0 1px 2px rgb(0 0 0 / 0.06); }
+  .prohead { display: flex; align-items: center; gap: 12px; }
+  .prohead .text { flex: 1; display: flex; flex-direction: column; gap: 1px; min-width: 0; }
+  .strong { font-weight: 700; }
+  .proactions { display: flex; align-items: center; gap: 8px; }
   .quit {
     margin-top: auto;
     display: flex;
@@ -483,8 +490,6 @@
   .links { display: flex; gap: 18px; margin-top: 10px; }
   .link { background: none; border: 0; padding: 0; font: inherit; color: var(--ink); text-decoration: underline; text-underline-offset: 3px; cursor: pointer; }
   .update { display: flex; align-items: center; gap: 12px; min-height: 52px; border-bottom: 1px solid var(--line); }
-  .license { display: flex; gap: 8px; margin-top: 4px; }
-  .license .field { flex: 1; min-width: 0; font-family: var(--mono, ui-monospace, monospace); font-size: 12px; }
   .update .icon { display: grid; place-items: center; width: 28px; height: 28px; border-radius: 7px; background: var(--recess); color: var(--ink-2); flex: none; }
   .update .text { flex: 1; display: flex; flex-direction: column; gap: 1px; min-width: 0; }
   .solo { display: flex; flex-direction: column; align-items: flex-start; gap: 14px; padding: 18px 0; }

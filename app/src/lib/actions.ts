@@ -1,7 +1,7 @@
 // User intents. In the Tauri app each one becomes a backend command; in the
 // browser design review they mutate the demo state so the UI stays clickable.
 
-import { app, inTauri, localNet, normalizeCode, type Issue } from './state.svelte';
+import { app, inTauri, localNet, normalizeCode, proModal, type Issue } from './state.svelte';
 
 export type Section = 'devices' | 'audio' | 'network' | 'advanced' | 'about';
 
@@ -75,7 +75,7 @@ export const actions = {
     if (!(await call('fix_issue', { issue }))) app.issues = app.issues.filter((i) => i !== issue);
   },
 
-  async openWindow(section: Section) {
+  async openWindow(section: Section | 'pro') {
     if (!(await call('open_window', { section }))) location.href = `/?demo=${new URLSearchParams(location.search).get('demo') ?? 'host'}#${section}`;
   },
   async setVolume(client: string, volume: number) {
@@ -113,6 +113,12 @@ export const actions = {
     app.update = version;
     return version;
   },
+  /** A Pro feature was clicked without Pro: show the Unlock Pro dialog
+   *  (from the tray, in the main window). */
+  getPro(step: 'offer' | 'key' = 'offer') {
+    if (location.pathname.startsWith('/popover')) return void actions.openWindow('pro');
+    proModal.step = step;
+  },
   async openUrl(url: string) {
     if (!inTauri) return void window.open(url, '_blank');
     const { openUrl } = await import('@tauri-apps/plugin-opener');
@@ -121,7 +127,7 @@ export const actions = {
   /** About → Aonin Pro: check and keep the key. Throws with the reason. */
   async setLicense(key: string) {
     if (!inTauri) {
-      if (!/^AONIN-[w-]{90,}$/.test(key.replace(/s/g, ''))) throw new Error("That license key isn't valid. Check it and try again.");
+      if (!/^AONIN-[\w-]{90,}$/.test(key.replace(/\s/g, ''))) throw new Error("That license key isn't valid. Check it and try again.");
       app.license = { id: 'A1B2C3D4', updatesUntil: '2027-11-04' };
       if (app.edition === 'pro') app.proUnlocked = true;
       return;

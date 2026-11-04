@@ -1,5 +1,6 @@
 <script lang="ts">
   import Issues from './Issues.svelte';
+  import EditionBadge from './EditionBadge.svelte';
   import { ChevronDown, ChevronRight, Globe, Info, Lock, Mic, MicOff, Monitor, Power } from '@lucide/svelte';
   import ClientRow from './ClientRow.svelte';
   import Grille from './Grille.svelte';
@@ -63,6 +64,7 @@
 <div class="pop">
   <header class="strip">
     <span class="me" title={app.hosting?.name ?? app.me.name}>{app.hosting?.name ?? app.me.name}</span>
+    <EditionBadge />
     <span class="role"><i style:background={dot}></i>{roleLine(app, true)}</span>
     {#if app.hosting}
       <button class="stop" onclick={actions.stopHosting}>{app.link ? 'Stop listening' : 'Stop'}</button>
@@ -92,7 +94,7 @@
       {#if app.proUnlocked}
         <button class="btn quiet make" onclick={makePrivate}><Lock size={13} strokeWidth={1.75} />Make private</button>
       {:else}
-        <button class="btn quiet make" onclick={() => actions.openWindow('about')}><Lock size={13} strokeWidth={1.75} />Make private<span class="pro-tag">Pro</span></button>
+        <button class="btn quiet make" onclick={() => actions.getPro()}><Lock size={13} strokeWidth={1.75} />Make private<span class="pro-tag">Pro</span></button>
       {/if}
     </div>
   {/if}
@@ -170,7 +172,7 @@
         <span class="label" title="Output">{app.outputLost ? 'No output' : `To ${app.hosting.output}`}</span>
       </div>
       {#each app.hosting.clients as row (row.id)}
-        <ClientRow {row} lost={app.outputLost} making={confirmId === row.id} locked={!app.proUnlocked} onmake={app.handingOver || app.hosting.code ? undefined : !app.proUnlocked ? () => actions.openWindow('about') : () => (confirmId = confirmId === row.id ? null : row.id)} />
+        <ClientRow {row} lost={app.outputLost} making={confirmId === row.id} locked={!app.proUnlocked} onmake={app.handingOver || app.hosting.code ? undefined : !app.proUnlocked ? () => actions.getPro() : () => (confirmId = confirmId === row.id ? null : row.id)} />
         {#if confirmId === row.id}
           <div class="confirm" role="group" aria-labelledby="make-{row.id}">
             <p class="q" id="make-{row.id}">Make {row.name} the listener?</p>

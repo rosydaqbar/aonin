@@ -264,3 +264,8 @@ export function roleLine(s: AppState, short = false): string {
 export function fmtMs(ms: number): string {
   return `${ms.toFixed(1)} ms`;
 }
+
+/** The Unlock Pro dialog in the main window: the offer, or the key field. */
+export const proModal = $state<{ step: null | 'offer' | 'key' }>({ step: null });
+/** Where to buy Aonin Pro, and where to ask for a key. */
+export const PRO_LINKS = { buy: 'https://aonin.app/pro', request: 'https://discord.gg/2cQBYaNHjC' };
