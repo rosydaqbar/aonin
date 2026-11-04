@@ -87,13 +87,10 @@ type Eng<'a> = State<'a, Arc<Engine>>;
 #[derive(Default)]
 struct Pending(std::sync::Mutex<Option<(Update, Vec<u8>, bool)>>);
 
-/// Where Aonin Pro updates come from. It answers only with a license key
-/// whose update period covers the build. Test builds point it elsewhere
-/// with AONIN_PRO_UPDATES.
-const PRO_UPDATES: &str = match option_env!("AONIN_PRO_UPDATES") {
-    Some(url) => url,
-    None => "https://pro.aonin.app/update/{{target}}/{{arch}}/{{current_version}}",
-};
+/// Where Aonin Pro updates come from, set at build time with
+/// AONIN_PRO_UPDATES. It answers only with a license key whose update
+/// period covers the build. Without it, Aonin Pro can't be downloaded.
+const PRO_UPDATES: Option<&str> = option_env!("AONIN_PRO_UPDATES");
 
 /// The updater for this device: GitHub for free, the Pro server (with the
 /// license) for Pro. `switch` also accepts the same version, for the move
@@ -101,7 +98,7 @@ const PRO_UPDATES: &str = match option_env!("AONIN_PRO_UPDATES") {
 fn updater(app: &AppHandle, pro_key: Option<&str>, switch: bool) -> Result<tauri_plugin_updater::Updater, String> {
     let mut b = app.updater_builder();
     if let Some(key) = pro_key {
-        let url = PRO_UPDATES.parse().map_err(err)?;
+        let url = PRO_UPDATES.ok_or("Aonin Pro isn't available for this version yet. Try again later.")?.parse().map_err(err)?;
         b = b.endpoints(vec![url]).map_err(err)?.header("Authorization", format!("License {key}")).map_err(err)?;
     }
     if switch {
