@@ -132,7 +132,7 @@ fn main() -> Result<()> {
         Cmd::Devices => audio::list_devices(),
         Cmd::License { key } => {
             let l = aon::license::verify(&key)?;
-            println!("valid: {} (id {}), issued {}, updates until {}", l.email, l.id, l.issued, l.updates_until);
+            println!("valid: license {}, updates until {}", l.id, l.updates_until);
             Ok(())
         }
         Cmd::Permissions => {

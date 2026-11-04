@@ -337,7 +337,7 @@
             <span class="icon" aria-hidden="true"><BadgeCheck size={16} strokeWidth={1.75} /></span>
             <span class="text">
               <span>Aonin Pro is unlocked</span>
-              <span class="label">{app.license.email} · updates until {fmtDate(app.license.updatesUntil)}</span>
+              <span class="label">License {app.license.id} · updates until {fmtDate(app.license.updatesUntil)}</span>
             </span>
             <button class="btn quiet" onclick={actions.clearLicense}>Remove key</button>
           </div>
@@ -356,12 +356,12 @@
             <span class="text">
               {#if pro === 'downloading'}
                 <span>Downloading Aonin Pro…</span>
-                <span class="label">{app.license.email} · this takes a moment.</span>
+                <span class="label">License {app.license.id} · this takes a moment.</span>
               {:else if app.edition === 'pro'}
                 <span>Your Pro updates ended on {fmtDate(app.license.updatesUntil)}</span>
                 <span class="label">Renew to use Pro in this version.</span>
               {:else}
-                <span>License for {app.license.email}</span>
+                <span>License {app.license.id}</span>
                 <span class="label" class:bad={!!proError}>{proError ?? 'Download Aonin Pro to unlock its features.'}</span>
               {/if}
             </span>

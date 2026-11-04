@@ -84,7 +84,7 @@ export interface AppState {
   edition: 'free' | 'pro';
   proUnlocked: boolean;
   /** The Aonin Pro license entered here (already checked). */
-  license: null | { id: string; email: string; issued: string; updatesUntil: string };
+  license: null | { id: string; updatesUntil: string };
   /** Free build: Aonin Pro is downloaded and waits for a restart. */
   proReady: boolean;
 }
@@ -148,7 +148,7 @@ const base: AppState = {
   proReady: false,
 };
 
-const demoLicense = { id: 'a1b2c3', email: 'you@example.com', issued: '2026-11-04', updatesUntil: '2027-11-04' };
+const demoLicense = { id: 'A1B2C3D4', updatesUntil: '2027-11-04' };
 
 const clients: ClientRow[] = [
   { id: 'a', name: "Studio MacBook Pro", os: 'macos', sends: { system: true, mic: true }, mark: 'live', latencyMs: 21.8, recovered: 0, level: 0.62, volume: 0.72, muted: false },
