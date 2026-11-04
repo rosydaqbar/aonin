@@ -7,6 +7,7 @@ pub mod engine;
 pub mod net;
 pub mod permissions;
 pub mod private;
+pub mod pro;
 #[cfg(target_os = "macos")]
 mod macloop;
 #[cfg(windows)]

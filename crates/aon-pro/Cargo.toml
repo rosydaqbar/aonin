@@ -1,0 +1,9 @@
+[package]
+name = "aon-pro"
+version = "0.1.0"
+edition = "2024"
+license = "GPL-3.0-or-later"
+description = "Aonin Pro hook. This is the free stub; official Pro builds replace this crate."
+
+[dependencies]
+aon = { version = "0.1.0", path = "../aon" }

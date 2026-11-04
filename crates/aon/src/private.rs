@@ -13,6 +13,9 @@
 //! its 16-byte tag.
 //! PairStart:  "AONP", 1, SPAKE2 message.
 //! PairReply:  "AONP", 2, u8 length, SPAKE2 message, sealed listener name.
+//!
+//! This file is the audio sender's side, which every edition has. The
+//! listener's side is Aonin Pro (see `pro`).
 
 use chacha20poly1305::aead::{Aead, AeadCore, KeyInit, OsRng};
 use chacha20poly1305::{XChaCha20Poly1305, XNonce};
@@ -21,8 +24,8 @@ use spake2::{Ed25519Group, Identity, Password, Spake2};
 use x25519_dalek::{PublicKey, StaticSecret};
 
 const SEALED: &[u8; 4] = b"AONS";
-const PAIR: &[u8; 4] = b"AONP";
-const UPGRADE: &[u8; 4] = b"AONU";
+pub const PAIR: &[u8; 4] = b"AONP";
+pub const UPGRADE: &[u8; 4] = b"AONU";
 const NONCE: usize = 24;
 /// Bytes a sealed packet adds: magic, nonce, tag.
 pub const OVERHEAD: usize = 4 + NONCE + 16;
@@ -31,8 +34,9 @@ pub const OVERHEAD: usize = 4 + NONCE + 16;
 pub const CODE_ALPHABET: &[u8; 32] = b"ABCDEFGHJKLMNPQRSTUVWXYZ23456789";
 pub const CODE_LEN: usize = 6;
 
-const SENDER_ID: &[u8] = b"aonin audio sender";
-const LISTENER_ID: &[u8] = b"aonin listener";
+/// SPAKE2 identities of the two sides.
+pub const SENDER_ID: &[u8] = b"aonin audio sender";
+pub const LISTENER_ID: &[u8] = b"aonin listener";
 
 pub fn new_code() -> String {
     let mut bytes = [0u8; CODE_LEN];
@@ -127,13 +131,7 @@ impl Pairing {
     }
 }
 
-/// Listener side: answer a PairStart with the code on screen. Returns the
-/// reply to send and the key for that sender. With a wrong code the key is
-/// simply one the sender doesn't have.
-pub fn answer(start: &[u8], code: &str, name: &str) -> Option<(Vec<u8>, Cipher)> {
-    let _ = (start, code, name);
-    None
-}
+// The listener side (answering PairStart) is Aonin Pro: see `pro::PrivateHubOps`.
 
 /// An audio sender already connected when its listener turned private
 /// asks for the code (`UpgradeRequest`: "AONU", 1, X25519 public key). The
@@ -167,11 +165,7 @@ impl Upgrade {
     }
 }
 
-/// Listener side of `Upgrade`.
-pub fn answer_upgrade(request: &[u8], code: &str) -> Option<Vec<u8>> {
-    let _ = (request, code);
-    None
-}
+// The listener side of `Upgrade` is Aonin Pro too.
 
 pub fn is_upgrade_request(data: &[u8]) -> bool {
     data.len() > 5 && data.starts_with(UPGRADE) && data[4] == 1
@@ -193,9 +187,8 @@ pub fn is_pair_reply(data: &[u8]) -> bool {
 mod tests {
     use super::*;
 
-
-
-
+    // Pairing and upgrade round trips need the listener side; they are
+    // tested in aon-pro.
 
     #[test]
     fn codes() {

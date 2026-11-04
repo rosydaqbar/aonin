@@ -63,10 +63,10 @@ npm run tauri build   # installer: .exe / .msi on Windows, .app / .dmg on macOS
 The engine also ships as a small CLI, handy for testing without the app:
 
 ```sh
-cargo run --release -p aon -- devices                 # list audio devices
-cargo run --release -p aon -- hub                     # receive, mix and play
-cargo run --release -p aon -- send 192.168.1.20       # send this machine's system audio to a hub
-cargo run --release -p aon -- send 192.168.1.20 --source mic
+cargo run --release -p aon-cli -- devices             # list audio devices
+cargo run --release -p aon-cli -- hub                 # receive, mix and play
+cargo run --release -p aon-cli -- send 192.168.1.20   # send this machine's system audio to a hub
+cargo run --release -p aon-cli -- send 192.168.1.20 --source mic
 ```
 
 ### Project layout
@@ -74,7 +74,9 @@ cargo run --release -p aon -- send 192.168.1.20 --source mic
 | Path | What |
 | --- | --- |
 | `crates/aon-core` | Platform-independent core: wire protocol, jitter buffer, resampler |
-| `crates/aon` | Audio I/O (cpal), UDP sender and hub, discovery, listener and audio sender engine, CLI |
+| `crates/aon` | Audio I/O (cpal), UDP sender and hub, discovery, listener and audio sender engine |
+| `crates/aon-pro` | Hook for Aonin Pro; in this repo a stub, so Pro features stay locked |
+| `crates/aon-cli` | Command-line tool for testing (`aon`) |
 | `app` | Desktop app: Tauri 2 shell (tray, popover, window) and the Svelte UI |
 | `app/icons-src` | Icon sources (SVG) |
 

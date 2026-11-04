@@ -4,6 +4,7 @@
 use anyhow::Result;
 use crate::audio;
 use crate::private::{self, Cipher};
+use crate::pro::PrivateHubOps;
 use aon_core::playout::{self, StreamStats};
 use aon_core::protocol::{self, BLOCK_SAMPLES, Block, Codec, MAX_PACKET_BYTES, OPUS_FRAME_BLOCKS, OPUS_FRAME_FRAMES, Os, Packet, Quality, SAMPLE_RATE, Source};
 use aon_core::resample::Resampler;
@@ -396,6 +397,9 @@ pub const GRANDFATHER: Duration = Duration::from_secs(60);
 pub struct PrivateHub {
     pub code: String,
     pub name: String,
+    /// Answers pairings (Aonin Pro). Without it the hub stays private but
+    /// lets nobody new in.
+    pub ops: Option<Arc<dyn PrivateHubOps>>,
 }
 
 /// Pairing attempts one address may make per minute. The code has 30 bits,
@@ -586,7 +590,8 @@ pub fn run_hub(
                         } else {
                             tries.1 += 1;
                             if tries.1 <= PAIR_TRIES_PER_MINUTE
-                                && let Some((reply, key)) = private::answer(raw, &s.code, &s.name)
+                                && let Some(ops) = &s.ops
+                                && let Some((reply, key)) = ops.answer(raw, &s.code, &s.name)
                             {
                                 // With a wrong code this is a key the sender
                                 // doesn't have, so nothing it sends will open.
@@ -605,7 +610,7 @@ pub fn run_hub(
                             && req.as_slice() == raw
                         {
                             let _ = sock.send_to(reply, addr);
-                        } else if let Some(reply) = private::answer_upgrade(raw, &s.code) {
+                        } else if let Some(reply) = s.ops.as_ref().and_then(|ops| ops.answer_upgrade(raw, &s.code)) {
                             let _ = sock.send_to(&reply, addr);
                             upgraded.insert(addr.ip(), (raw.to_vec(), reply));
                         }

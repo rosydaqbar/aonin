@@ -139,7 +139,6 @@ dependencies = [
  "clap",
  "cpal",
  "crossbeam-channel",
- "gethostname",
  "getrandom 0.2.17",
  "if-addrs",
  "objc2",
@@ -158,10 +157,29 @@ dependencies = [
 ]
 
 [[package]]
+name = "aon-cli"
+version = "0.1.0"
+dependencies = [
+ "anyhow",
+ "aon",
+ "aon-core",
+ "aon-pro",
+ "clap",
+ "gethostname",
+]
+
+[[package]]
 name = "aon-core"
 version = "0.1.0"
 dependencies = [
  "rtrb",
+]
+
+[[package]]
+name = "aon-pro"
+version = "0.1.0"
+dependencies = [
+ "aon",
 ]
 
 [[package]]
@@ -170,6 +188,7 @@ version = "0.1.9"
 dependencies = [
  "aon",
  "aon-core",
+ "aon-pro",
  "gethostname",
  "serde",
  "serde_json",

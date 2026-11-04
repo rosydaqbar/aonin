@@ -277,7 +277,7 @@ fn cli_engine(output: Option<String>) -> std::sync::Arc<aon::engine::Engine> {
     let id = RandomState::new().hash_one(std::time::Instant::now()) | 1;
     let name = gethostname::gethostname().to_string_lossy().into_owned();
     let prefs = aon::engine::Prefs { reconnect: false, output, ..Default::default() };
-    aon::engine::Engine::new(id, name, prefs)
+    aon::engine::Engine::new(id, name, prefs, aon_pro::new())
 }
 
 fn resolve(hub: &str) -> Result<SocketAddr> {

@@ -9,6 +9,7 @@ use crate::audio;
 use crate::discovery::{Advert, Discovery};
 use crate::net::{self, HubShared, Identity, PrivateHub, SendConfig, SendShared};
 use crate::private::{self, Cipher, Pairing, Upgrade};
+use crate::pro::{Edition, Feature, Pro};
 use anyhow::{Result, anyhow};
 use aon_core::protocol::{self, DEFAULT_PORT, Os, Quality, Source};
 use serde::Serialize;
@@ -164,6 +165,8 @@ pub enum DeviceRole {
 
 pub struct Engine {
     me: Identity,
+    /// What this edition unlocks (see `pro`).
+    pro: Arc<dyn Pro>,
     disco: Arc<Discovery>,
     host: Mutex<Option<HostRun>>,
     link: Mutex<Option<LinkRun>>,
@@ -212,6 +215,7 @@ pub struct Snapshot {
     /// Looking for the listener that has the code the user typed.
     joining: bool,
     join_error: Option<String>,
+    edition: Edition,
 }
 
 #[derive(Serialize)]
@@ -377,7 +381,7 @@ fn meter(peak: f32) -> f32 {
 }
 
 impl Engine {
-    pub fn new(device: u64, name: String, prefs: Prefs) -> Arc<Self> {
+    pub fn new(device: u64, name: String, prefs: Prefs, pro: Arc<dyn Pro>) -> Arc<Self> {
         // Speakers a crashed run left muted come back on.
         #[cfg(windows)]
         crate::speakers::recover();
@@ -390,6 +394,7 @@ impl Engine {
         crate::permissions::advertise(DEFAULT_PORT);
         Arc::new(Self {
             me: Identity { device, name, os },
+            pro,
             disco,
             host: Mutex::new(None),
             link: Mutex::new(None),
@@ -505,6 +510,9 @@ impl Engine {
     /// `code` is set.
     pub fn start_listening(&self, name: Option<String>, code: Option<String>) -> Result<()> {
         let code = code.map(|c| private::normalize_code(&c).ok_or_else(|| anyhow!("A code has 6 letters and numbers."))).transpose()?;
+        if code.is_some() {
+            self.pro.allow(Feature::MakePrivate)?;
+        }
         {
             let mut p = self.prefs.lock().unwrap();
             p.listen_name = name.map(|n| n.trim().to_string()).filter(|n| !n.is_empty());
@@ -520,6 +528,9 @@ impl Engine {
         // Only a listener can be private; an audio sender has no such choice.
         if self.host.lock().unwrap().is_none() {
             return Err(anyhow!("Only the listener can be private."));
+        }
+        if code.is_some() {
+            self.pro.allow(Feature::MakePrivate)?;
         }
         if code.is_some() && self.handover.lock().unwrap().is_some() {
             return Err(anyhow!("Wait for the handover to finish."));
@@ -551,7 +562,7 @@ impl Engine {
     /// Tell the running hub whether it is private, and with which code.
     fn apply_private(&self) {
         let code = self.prefs.lock().unwrap().private_code.clone();
-        let session = code.map(|code| PrivateHub { code, name: self.listen_name() });
+        let session = code.map(|code| PrivateHub { code, name: self.listen_name(), ops: self.pro.private_hub() });
         if let Some(h) = self.host.lock().unwrap().as_ref() {
             *h.shared.private.lock().unwrap() = session;
         }
@@ -802,6 +813,7 @@ impl Engine {
     /// It starts listening, every sender follows it, and this device then
     /// sends to it too. All of it travels in the beacon (see `follow_handover`).
     pub fn hand_over(&self, client: u64) -> Result<()> {
+        self.pro.allow(Feature::HandOver)?;
         let peer = self.disco.peers.lock().unwrap().get(&client).cloned().ok_or_else(|| anyhow!("That device is no longer on the network."))?;
         let sending_here = self
             .host
@@ -1333,6 +1345,7 @@ impl Engine {
             handing_over,
             joining,
             join_error,
+            edition: self.pro.edition(),
         }
     }
 
@@ -1370,7 +1383,7 @@ mod tests {
     #[test]
     fn host_role_is_remembered_until_stop() {
         let prefs = Prefs { reconnect: false, quality: Quality::Highest, ..Default::default() };
-        let engine = Engine::new(2, "test".into(), prefs);
+        let engine = Engine::new(2, "test".into(), prefs, Arc::new(crate::pro::Free));
         engine.become_host().unwrap();
         assert!(engine.was_hosting());
         engine.shutdown();
@@ -1380,13 +1393,27 @@ mod tests {
         assert!(!engine.was_hosting(), "Stop forgets it");
     }
 
+    /// The free edition can't listen privately or hand over.
+    #[test]
+    fn free_edition_keeps_pro_features_locked() {
+        let prefs = Prefs { reconnect: false, ..Default::default() };
+        let engine = Engine::new(3, "test".into(), prefs, Arc::new(crate::pro::Free));
+        let e = engine.start_listening(None, Some("K7Q4MZ".into())).unwrap_err().to_string();
+        assert!(e.contains("Aonin Pro"), "{e}");
+        assert!(!engine.was_hosting(), "it didn't start listening publicly instead");
+        let e = engine.hand_over(9).unwrap_err().to_string();
+        assert!(e.contains("Aonin Pro"), "{e}");
+        assert_eq!(engine.pro.edition(), Edition::Free);
+        engine.shutdown();
+    }
+
     /// A lock held across the snapshot once froze the UI: tick must return.
     #[test]
     fn tick_returns_and_never_deadlocks() {
         let (tx, rx) = mpsc::channel();
         std::thread::spawn(move || {
             let prefs = Prefs { quality: Quality::Cd, start_at_login: true, ..Default::default() };
-            let engine = Engine::new(1, "test".into(), prefs);
+            let engine = Engine::new(1, "test".into(), prefs, Arc::new(crate::pro::Free));
             let snaps: Vec<String> = (0..3).map(|_| engine.tick().quality.to_string()).collect();
             engine.shutdown();
             let _ = tx.send(snaps);

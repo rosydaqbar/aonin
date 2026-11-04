@@ -458,7 +458,7 @@ pub fn run() {
                 private_code: cfg.private_code.clone(),
                 last_code: cfg.last_code.clone(),
             };
-            let engine = Engine::new(cfg.device, name, prefs);
+            let engine = Engine::new(cfg.device, name, prefs, aon_pro::new());
             // Pick up the role this device had when Aonin last ran.
             if cfg.was_hosting {
                 let _ = engine.become_host();
