@@ -1,14 +1,16 @@
 <script lang="ts">
   import { TriangleAlert } from '@lucide/svelte';
   import { actions } from './actions';
-  import { app, type Issue } from './state.svelte';
+  import { app, localNet, type Issue } from './state.svelte';
 
   let { compact = false }: { compact?: boolean } = $props();
 
   const copy = (issue: Issue): { text: string; action: string } => {
     switch (issue) {
       case 'localNetwork':
-        return { text: 'macOS is blocking Aonin from other computers on this network.', action: 'Open settings' };
+        return localNet.ask === 'done'
+          ? { text: "macOS didn't ask again: it asks only once. Switch Aonin on in Local Network settings.", action: 'Open settings' }
+          : { text: 'macOS is blocking Aonin from other computers on this network.', action: 'Open settings' };
       case 'audioCapture':
         return { text: "Aonin isn't allowed to record this Mac's audio.", action: 'Open settings' };
       case 'microphone':
@@ -28,7 +30,7 @@
       <div class="issue">
         <span class="mark" aria-hidden="true"><TriangleAlert size={15} strokeWidth={1.75} /></span>
         <p>{c.text}</p>
-        {#if issue === 'localNetwork'}<button class="btn" onclick={actions.askLocalNetwork} title="Show the macOS prompt again">Ask again</button>{/if}
+        {#if issue === 'localNetwork' && localNet.ask !== 'done'}<button class="btn" onclick={actions.askLocalNetwork} disabled={localNet.ask === 'asking'} title="Show the macOS prompt again">{localNet.ask === 'asking' ? 'Asking…' : 'Ask again'}</button>{/if}
         <button class="btn primary" onclick={() => actions.fixIssue(issue)}>{c.action}</button>
       </div>
     {/each}

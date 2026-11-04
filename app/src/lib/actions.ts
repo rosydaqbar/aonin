@@ -1,7 +1,7 @@
 // User intents. In the Tauri app each one becomes a backend command; in the
 // browser design review they mutate the demo state so the UI stays clickable.
 
-import { app, inTauri, normalizeCode, type Issue } from './state.svelte';
+import { app, inTauri, localNet, normalizeCode, type Issue } from './state.svelte';
 
 export type Section = 'devices' | 'audio' | 'network' | 'advanced' | 'about';
 
@@ -66,7 +66,10 @@ export const actions = {
   },
   /** macOS: make the Local Network prompt appear again. */
   async askLocalNetwork() {
+    localNet.ask = 'asking';
     await call('ask_local_network');
+    // The probe runs for about five seconds; the prompt, if any, shows by then.
+    setTimeout(() => (localNet.ask = 'done'), 6000);
   },
   async fixIssue(issue: Issue) {
     if (!(await call('fix_issue', { issue }))) app.issues = app.issues.filter((i) => i !== issue);

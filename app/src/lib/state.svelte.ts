@@ -234,6 +234,11 @@ function load(): AppState {
 export const app = $state<AppState>(load());
 
 /** Follow the engine: each `state` event replaces the whole snapshot. */
+/** macOS Ask again: asking for a few seconds, then done. macOS shows its
+ *  Local Network prompt only once per app, so "done" while still blocked
+ *  means the answer is in Settings. */
+export const localNet = $state<{ ask: 'idle' | 'asking' | 'done' }>({ ask: 'idle' });
+
 export async function followBackend() {
   if (!inTauri) return;
   const { listen } = await import('@tauri-apps/api/event');

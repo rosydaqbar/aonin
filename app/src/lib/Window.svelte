@@ -9,7 +9,7 @@
   import StatusMark from './StatusMark.svelte';
   import Switch from './Switch.svelte';
   import { actions, type Section } from './actions';
-  import { app, fmtCode, fmtMs, newCode, QUALITY, roleLine, type Quality } from './state.svelte';
+  import { app, fmtCode, fmtMs, localNet, newCode, QUALITY, roleLine, type Quality } from './state.svelte';
 
   const sections: Section[] = ['devices', 'audio', 'network', 'advanced', 'about'];
   const sectionIcons = { devices: MonitorSmartphone, audio: AudioLines, network: Network, advanced: SlidersHorizontal, about: Info };
@@ -279,10 +279,16 @@
             <span class="icon" aria-hidden="true"><Network size={16} strokeWidth={1.75} /></span>
             <span class="text">
               <span>{app.issues.includes('localNetwork') ? 'macOS is blocking Aonin from this network' : 'Aonin can reach this network'}</span>
-              <span class="label">macOS asks once. If it never asked, or Aonin is missing from Privacy &amp; Security › Local Network, ask again. Then switch Aonin on there.</span>
+              {#if localNet.ask === 'asking'}
+                <span class="label">Asking macOS… Watch for its prompt and choose Allow.</span>
+              {:else if localNet.ask === 'done' && app.issues.includes('localNetwork')}
+                <span class="label bad">macOS didn't ask again: it asks only once per app. Open settings and switch Aonin on under Local Network.</span>
+              {:else}
+                <span class="label">macOS asks once. If it never asked, or Aonin is missing from Privacy &amp; Security › Local Network, ask again. Then switch Aonin on there.</span>
+              {/if}
             </span>
-            <button class="btn" onclick={actions.askLocalNetwork}>Ask again</button>
-            <button class="btn" onclick={() => actions.fixIssue('localNetwork')}>Open settings</button>
+            <button class="btn" onclick={actions.askLocalNetwork} disabled={localNet.ask === 'asking'}>{localNet.ask === 'asking' ? 'Asking…' : 'Ask again'}</button>
+            <button class="btn" class:primary={localNet.ask === 'done' && app.issues.includes('localNetwork')} onclick={() => actions.fixIssue('localNetwork')}>Open settings</button>
           </div>
           <div class="titlebar"><h2>Wi-Fi</h2></div>
           <Switch icon={Wifi} label="Keep Wi-Fi steady" hint="Turns off AirDrop and Handoff scanning, which makes Mac Wi-Fi stall every few seconds. Asks for your password; back on when you switch this off or restart." checked={app.options.quietWifi} onchange={(on) => actions.setQuietWifi(on)} />
