@@ -1,17 +1,35 @@
 # Aonin
 
-Hear every computer on your desk through one pair of headphones.
+Stream audio from multiple computers to one output.
 
 ![Three computers send their audio over the local network to the listener, which mixes it into one pair of headphones](docs/images/how-it-works.webp)
 
-Aonin joins the audio of computers on the same local network into one output. One machine becomes the **listener**. The others join as **audio senders** and stream their system audio and/or microphone to it, and the listener mixes everything and plays it on one device. A listener can be private: it then shows a code, and only devices that type it can join. It runs on **Windows and macOS** from the tray / menu bar.
+Aonin streams audio between computers on the same local network. One computer is the **listener**. The others connect as **audio senders**, streaming system audio, microphone input, or both. The listener mixes the incoming streams and plays them through one audio device.
 
-- **Pure local network.** No servers, no accounts. Devices find each other on the LAN and nothing leaves it.
-- **Highest quality by default.** Uncompressed 24-bit / 48 kHz PCM, with lighter tiers (CD 16-bit, and Opus Balanced / Saver) for weak networks.
-- **Real time over Wi-Fi.** Typically 15–30 ms of buffering, with redundant packets and retransmits so Wi-Fi packet loss doesn't become dropouts.
-- **No drivers.** System audio is captured with WASAPI loopback on Windows and the Core Audio process tap on macOS 14.2+.
+Aonin runs on **Windows and macOS** from the system tray or menu bar. It supports English, Bahasa Indonesia, French, Spanish, and Simplified Chinese.
 
-> **Status:** early development. The engine and the listener/audio sender flow work; see [Roadmap](#roadmap) for what's still missing. Installers are on [Releases](https://github.com/rosydaqbar/aonin/releases).
+- **Local network only.** Devices discover each other over the LAN without servers or accounts. Audio stays on the local network.
+- **Uncompressed audio by default.** Streams use 24-bit / 48 kHz PCM, with lower-bandwidth options including CD 16-bit and Opus Balanced / Saver for weaker networks.
+- **Real-time streaming over Wi-Fi.** Typically 15–30 ms of buffering, with redundant packets and retransmissions to reduce dropouts caused by packet loss.
+- **No drivers required.** Aonin captures system audio using WASAPI loopback on Windows and the Core Audio process tap on macOS 14.2+.
+
+> **Status:** Aonin is in early development. Core audio streaming works, while other features are still in development. See the [Roadmap](#roadmap) for details. Installers are available on [Releases](https://github.com/rosydaqbar/aonin/releases).
+
+## Aonin Pro
+
+Aonin is free. **Aonin Pro** includes:
+
+- **Private listeners:** A listener displays a 6-character code. Audio senders must enter the code to connect. Audio in private sessions is encrypted.
+- **Make listener:** Transfer the listener role to an audio sender. All other audio senders follow the new listener.
+- **Android and iOS apps:** Planned for a future release.
+
+One license covers 2 computers for life and includes one year of updates. Activate Pro on the listener, where private sessions and listener switching are controlled. Audio senders don't need Pro.
+
+To activate Pro, open the **Unlock Pro features** dialog from a Pro feature in the app and enter your license key. Aonin downloads the Pro version and prompts you to restart.
+
+More on [lfg.ink/aonin](https://lfg.ink/aonin).
+
+A separate private repository contains the Pro features. This repository builds the free version, with `crates/aon-pro` serving as a stub for Pro integration.
 
 ## How it works
 
@@ -21,25 +39,38 @@ Aonin joins the audio of computers on the same local network into one output. On
  Laptop  ──┘
 ```
 
-- **Discovery:** every running Aonin broadcasts a small beacon on the LAN once a second, so listeners appear on their own. Private listeners stay out of the list.
-- **Transport:** audio is cut into 2 ms blocks. Every packet also carries the previous block, so a single lost packet is recovered from the next one with no extra delay. Longer gaps are re-requested (NACK) and retransmitted, up to three times.
-- **Jitter buffer:** each incoming stream has an adaptive buffer that grows to cover the worst recent Wi-Fi stall and shrinks again while the network behaves. Clock drift between machines is corrected by resampling a few hundred ppm, not by dropping samples.
-- **No loops:** a device can't join a listener whose audio already comes from that device (for example, a listener that is itself sending to this machine), because the sound would bounce back and forth. Such listeners are shown but can't be joined.
+- **Discovery:** Each running instance of Aonin broadcasts a small beacon on the LAN once a second. Available listeners appear automatically. Private listeners are hidden from the list.
+- **Transport:** Audio is divided into 2 ms blocks. Each packet also contains the previous block. This lets the receiver recover a single lost packet from the next packet without additional delay. Longer gaps trigger NACK requests and retransmissions, up to three times.
+- **Jitter buffer:** Each incoming stream has an adaptive buffer that increases to accommodate recent Wi-Fi stalls and decreases when network conditions improve. Clock drift between computers is corrected by resampling a few hundred ppm instead of dropping samples.
+- **Loop prevention:** A device cannot join a listener if that connection would create an audio feedback loop, such as a listener sending audio back to the same computer. These listeners remain visible but cannot be joined.
 
 ## Platform notes
 
-- **macOS** asks once for permission to record system audio and the microphone. Until it is granted, capture is silent.
-- **Windows Firewall** asks once to allow incoming connections the first time a machine listens.
-- For the steadiest Wi-Fi on a Mac, AirDrop/Handoff (AWDL) can cause short stalls; the adaptive buffer absorbs them at the cost of a few ms.
+- **macOS:** Aonin requests permission to record system audio and microphone input. Audio capture remains silent until permission is granted.
+- **Local Network access on macOS:** Aonin also requests Local Network permission once. If you missed the prompt, open **Network › Local network access** in Aonin and select **Ask again**. You can also select **Open settings** to enable Aonin under Privacy & Security › Local Network.
+- **Windows Firewall:** Windows requests permission for incoming connections the first time a computer acts as a listener.
+- **Wi-Fi on macOS:** AirDrop/Handoff (AWDL) can cause brief stalls. The adaptive buffer compensates for these interruptions by adding a few milliseconds of buffering.
 
 ## Installing
 
-Download the installer for your system from [Releases](https://github.com/rosydaqbar/aonin/releases).
+Download the installer for your operating system from [Releases](https://github.com/rosydaqbar/aonin/releases).
 
-The builds are not code-signed yet, so the first launch needs one extra step:
+The installers are not code-signed yet, so Windows and macOS may require additional steps during installation.
 
-- **Windows:** SmartScreen may say "Windows protected your PC". Click **More info**, then **Run anyway**. Choose "install for all users" to have the installer allow Aonin through Windows Firewall.
-- **macOS:** open the DMG and drag Aonin to Applications. If macOS says it can't be opened, right-click Aonin in Applications and choose **Open**, or run `xattr -cr /Applications/Aonin.app`. Then allow audio recording when asked.
+- **Windows:** SmartScreen may display "Windows protected your PC". Select **More info**, then **Run anyway**. Choose "install for all users" to let the installer allow Aonin through Windows Firewall.
+- **macOS:** Open the DMG and drag Aonin into Applications. If macOS prevents it from opening, right-click Aonin in Applications and select **Open**. Alternatively, run `xattr -cr /Applications/Aonin.app`. Grant audio recording permissions when prompted.
+
+Aonin opens its window on the first launch. On subsequent launches, it runs from the system tray or menu bar.
+
+Aonin updates automatically from Releases.
+
+## Languages
+
+Aonin uses your system language by default. To change it, open the window and select a language from the menu above **Quit Aonin**.
+
+UI translations are stored in `app/src/lib/i18n`. The English source is `en.ts`, and each supported language has its own file with matching keys.
+
+To improve a translation or add a language, edit an existing translation file or copy one as a starting point, then open a pull request.
 
 ## Building from source
 
@@ -60,7 +91,7 @@ npm run tauri build   # installer: .exe / .msi on Windows, .app / .dmg on macOS
 
 ### Command-line tool
 
-The engine also ships as a small CLI, handy for testing without the app:
+The audio engine also includes a CLI for testing without the desktop app:
 
 ```sh
 cargo run --release -p aon-cli -- devices             # list audio devices
@@ -74,10 +105,11 @@ cargo run --release -p aon-cli -- send 192.168.1.20 --source mic
 | Path | What |
 | --- | --- |
 | `crates/aon-core` | Platform-independent core: wire protocol, jitter buffer, resampler |
-| `crates/aon` | Audio I/O (cpal), UDP sender and hub, discovery, listener and audio sender engine |
+| `crates/aon` | Audio I/O (cpal), UDP sender and hub, discovery, listener and audio sender engine, license check |
 | `crates/aon-pro` | Hook for Aonin Pro; in this repo a stub, so Pro features stay locked |
 | `crates/aon-cli` | Command-line tool for testing (`aon`) |
 | `app` | Desktop app: Tauri 2 shell (tray, popover, window) and the Svelte UI |
+| `app/src/lib/i18n` | UI text in every language |
 | `app/icons-src` | Icon sources (SVG) |
 
 Run the tests with `cargo test`.
@@ -97,13 +129,14 @@ Run the tests with `cargo test`.
 - [x] Open at login, and an optional "keep Wi-Fi steady" switch on macOS (turns off AWDL)
 - [x] Installers built by GitHub Actions (Windows NSIS, macOS DMG)
 - [x] Automatic updates, signed
+- [x] Five languages: English, Bahasa Indonesia, French, Spanish, Simplified Chinese
 
 ### V1
 
-- [x] Hand the listener role to another device, with every audio sender following it
-- [x] Private sessions, phase 1: a private listener shows a code, audio senders join with it, and the audio is encrypted
+- [x] Hand the listener role to another device, with every audio sender following it (Pro)
+- [x] Private sessions, phase 1: a private listener shows a code, audio senders join with it, and the audio is encrypted (Pro)
+- [x] Aonin Pro license keys, unlocked from the app
 - [ ] Private sessions, phase 2: sign in with email and password, or Google, so your own devices trust each other without a code
-
 
 ### V1.1
 
@@ -120,3 +153,4 @@ Run the tests with `cargo test`.
 ## License
 
 Aonin is free software, released under the [GNU General Public License v3.0](LICENSE) or (at your option) any later version. You may use, study, share and modify it; if you distribute a modified version, it must stay under the same license with its source available.
+
