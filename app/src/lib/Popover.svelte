@@ -9,6 +9,7 @@
   import StatusMark from './StatusMark.svelte';
   import { app, fmtCode, fmtMs, newCode, QUALITY, roleLine } from './state.svelte';
   import { actions } from './actions';
+  import { t, tm, tn } from './i18n/index.svelte';
 
   let dot = $derived(
     app.hosting && app.outputLost ? 'var(--red)'
@@ -55,9 +56,9 @@
   let streamSummary = $derived.by(() => {
     const l = app.link;
     if (!l) return '';
-    const send = [l.send.system && 'System audio', l.send.mic ? 'Mic on' : 'Mic off'].filter(Boolean).join(' · ');
-    const hear = [l.hear.system && 'audio', l.hear.mic && 'mic'].filter(Boolean).join(' and ');
-    return hear ? `${send} · Hearing their ${hear}` : send;
+    const send = [l.send.system && t('common.systemAudio'), l.send.mic ? t('tray.micOn') : t('tray.micOff')].filter(Boolean).join(' · ');
+    const hear = l.hear.system && l.hear.mic ? t('tray.hearBoth') : l.hear.system ? t('tray.hearAudio') : l.hear.mic ? t('tray.hearMic') : '';
+    return hear ? `${send} · ${t('tray.hearing', { what: hear })}` : send;
   });
 </script>
 
@@ -67,7 +68,7 @@
     <EditionBadge />
     <span class="role"><i style:background={dot}></i>{roleLine(app, true)}</span>
     {#if app.hosting}
-      <button class="stop" onclick={actions.stopHosting}>{app.link ? 'Stop listening' : 'Stop'}</button>
+      <button class="stop" onclick={actions.stopHosting}>{app.link ? t('common.stopListening') : t('common.stop')}</button>
     {/if}
   </header>
 
@@ -75,38 +76,38 @@
     {@const code = app.hosting.code}
     <div class="vis">
       <Lock size={14} strokeWidth={1.75} aria-hidden="true" />
-      <span>Private</span>
+      <span>{t('vis.private')}</span>
       <span class="tip">
-        <button class="info" aria-label="What private means" aria-describedby="vis-tip"><Info size={13} strokeWidth={1.75} /></button>
-        <span class="bubble" role="tooltip" id="vis-tip">Only devices with this code can join. Audio senders type it under Join.</span>
+        <button class="info" aria-label={t('vis.privateTipAria')} aria-describedby="vis-tip"><Info size={13} strokeWidth={1.75} /></button>
+        <span class="bubble" role="tooltip" id="vis-tip">{t('vis.privateTip')}</span>
       </span>
-      <button class="codechip code" onclick={() => copyCode(code)} title="Copy code" aria-label="Copy code {code.split('').join(' ')}">{copied ? 'Copied' : fmtCode(code)}</button>
-      <button class="btn quiet make" onclick={() => actions.setPrivate(null)}><Globe size={13} strokeWidth={1.75} />Make public</button>
+      <button class="codechip code" onclick={() => copyCode(code)} title={t('common.copyCode')} aria-label={`${t('common.copyCode')}: ${code.split('').join(' ')}`}>{copied ? t('common.copied') : fmtCode(code)}</button>
+      <button class="btn quiet make" onclick={() => actions.setPrivate(null)}><Globe size={13} strokeWidth={1.75} />{t('common.makePublic')}</button>
     </div>
   {:else if app.hosting}
     <div class="vis">
       <Globe size={14} strokeWidth={1.75} aria-hidden="true" />
-      <span>Visible to public</span>
+      <span>{t('vis.public')}</span>
       <span class="tip">
-        <button class="info" aria-label="What visible to public means" aria-describedby="vis-tip"><Info size={13} strokeWidth={1.75} /></button>
-        <span class="bubble" role="tooltip" id="vis-tip">Anyone on this network can join.</span>
+        <button class="info" aria-label={t('vis.publicTipAria')} aria-describedby="vis-tip"><Info size={13} strokeWidth={1.75} /></button>
+        <span class="bubble" role="tooltip" id="vis-tip">{t('vis.publicHint')}</span>
       </span>
       {#if app.proUnlocked}
-        <button class="btn quiet make" onclick={makePrivate}><Lock size={13} strokeWidth={1.75} />Make private</button>
+        <button class="btn quiet make" onclick={makePrivate}><Lock size={13} strokeWidth={1.75} />{t('common.makePrivate')}</button>
       {:else}
-        <button class="btn quiet make" onclick={() => actions.getPro()}><Lock size={13} strokeWidth={1.75} />Make private<span class="pro-tag">Pro</span></button>
+        <button class="btn quiet make" onclick={() => actions.getPro()}><Lock size={13} strokeWidth={1.75} />{t('common.makePrivate')}<span class="pro-tag">Pro</span></button>
       {/if}
     </div>
   {/if}
 
   {#if app.error}
-    <p class="alert" role="alert">{app.error}</p>
+    <p class="alert" role="alert">{tm(app.error)}</p>
   {/if}
 
   {#if app.outputLost && app.hosting}
     <div class="alert lost" role="status">
-      <p>{app.hosting.output} isn't playing. It may be unplugged, or another app may be holding it. Aonin keeps trying.</p>
-      <button class="btn" onclick={() => actions.openWindow('audio')}>Choose output</button>
+      <p>{t('alert.outputLostNamed', { device: app.hosting.output })}</p>
+      <button class="btn" onclick={() => actions.openWindow('audio')}>{t('alert.chooseOutput')}</button>
     </div>
   {/if}
 
@@ -122,43 +123,43 @@
     </section>
   {:else if idle && app.hosts.length === 0}
     <section class="solo">
-      <p>No listener on this network yet.</p>
+      <p>{t('devices.noListener')}</p>
       <span class="pair">
-        <button class="btn primary" onclick={() => (form = 'listen')}>Become listener</button>
-        <button class="btn" onclick={() => (form = 'join')}>Join</button>
+        <button class="btn primary" onclick={() => (form = 'listen')}>{t('common.becomeListener')}</button>
+        <button class="btn" onclick={() => (form = 'join')}>{t('common.join')}</button>
       </span>
-      <p class="label">Joining a private listener? Use Join and type its code.</p>
+      <p class="label">{t('devices.joinPrivateHint')}</p>
     </section>
   {/if}
 
   {#if app.link}
     <section class="block">
       <div class="head">
-        <span class="label">{app.link.status === 'connected' ? 'Sending to' : 'Reconnecting to'}</span>
+        <span class="label">{app.link.status === 'connected' ? t('tray.sendingTo') : t('tray.reconnectingTo')}</span>
         {#if app.link.status === 'connected'}<span class="label num">{fmtMs(app.link.latencyMs)}</span>{/if}
       </div>
       <div class="host">
         <StatusMark mark={app.link.status === 'connected' ? 'live' : 'connecting'} />
         <span class="name">{app.link.host.name}</span>
         <Grille level={app.link.sendLevel ?? 0} holes={8} muted={!app.link.send.system && !app.link.send.mic} />
-        <button class="btn" onclick={actions.disconnect}>Disconnect</button>
+        <button class="btn" onclick={actions.disconnect}>{t('common.disconnect')}</button>
       </div>
       <button class="disclose" aria-expanded={showStreams} aria-controls="streams" onclick={toggleStreams}>
-        <span class="label">Streams</span>
+        <span class="label">{t('tray.streams')}</span>
         <span class="summary">{streamSummary}</span>
         <span class="chev" class:open={showStreams}><ChevronDown size={14} strokeWidth={1.75} /></span>
       </button>
       {#if showStreams}
-      <div class="chips" id="streams" role="group" aria-label="Streams">
-        <span class="label">Send</span>
+      <div class="chips" id="streams" role="group" aria-label={t('tray.streams')}>
+        <span class="label">{t('tray.send')}</span>
         <span class="set">
-          <button class="chip" aria-pressed={app.link.send.system} onclick={() => actions.setSend('system', !app.link!.send.system)}><Monitor size={13} strokeWidth={1.75} />System audio</button>
-          <button class="chip" aria-pressed={app.link.send.mic} onclick={() => actions.setSend('mic', !app.link!.send.mic)} aria-label={app.link.send.mic ? 'Turn microphone off' : 'Turn microphone on'}>{#if app.link.send.mic}<Mic size={13} strokeWidth={1.75} />Mic on{:else}<MicOff size={13} strokeWidth={1.75} />Mic off{/if}</button>
+          <button class="chip" aria-pressed={app.link.send.system} onclick={() => actions.setSend('system', !app.link!.send.system)}><Monitor size={13} strokeWidth={1.75} />{t('common.systemAudio')}</button>
+          <button class="chip" aria-pressed={app.link.send.mic} onclick={() => actions.setSend('mic', !app.link!.send.mic)} aria-label={app.link.send.mic ? t('tray.micOnAria') : t('tray.micOffAria')}>{#if app.link.send.mic}<Mic size={13} strokeWidth={1.75} />{t('tray.micOn')}{:else}<MicOff size={13} strokeWidth={1.75} />{t('tray.micOff')}{/if}</button>
         </span>
-        <span class="label">Hear</span>
+        <span class="label">{t('tray.hear')}</span>
         <span class="set">
-          <button class="chip" aria-pressed={app.link.hear.system} onclick={() => actions.setHear('system', !app.link!.hear.system)}><Monitor size={13} strokeWidth={1.75} />System audio</button>
-          <button class="chip" aria-pressed={app.link.hear.mic} onclick={() => actions.setHear('mic', !app.link!.hear.mic)}><Mic size={13} strokeWidth={1.75} />Mic</button>
+          <button class="chip" aria-pressed={app.link.hear.system} onclick={() => actions.setHear('system', !app.link!.hear.system)}><Monitor size={13} strokeWidth={1.75} />{t('common.systemAudio')}</button>
+          <button class="chip" aria-pressed={app.link.hear.mic} onclick={() => actions.setHear('mic', !app.link!.hear.mic)}><Mic size={13} strokeWidth={1.75} />{t('common.mic')}</button>
         </span>
       </div>
       {/if}
@@ -168,55 +169,55 @@
   {#if app.hosting}
     <section class="block">
       <div class="head">
-        <span class="label">Audio senders</span>
-        <span class="label" title="Output">{app.outputLost ? 'No output' : `To ${app.hosting.output}`}</span>
+        <span class="label">{t('devices.audioSenders')}</span>
+        <span class="label" title={t('tray.output')}>{app.outputLost ? t('tray.noOutput') : t('tray.toOutput', { device: app.hosting.output })}</span>
       </div>
       {#each app.hosting.clients as row (row.id)}
         <ClientRow {row} lost={app.outputLost} making={confirmId === row.id} locked={!app.proUnlocked} onmake={app.handingOver || app.hosting.code ? undefined : !app.proUnlocked ? () => actions.getPro() : () => (confirmId = confirmId === row.id ? null : row.id)} />
         {#if confirmId === row.id}
           <div class="confirm" role="group" aria-labelledby="make-{row.id}">
-            <p class="q" id="make-{row.id}">Make {row.name} the listener?</p>
-            <p class="label">Everyone's audio will play there, this {app.me.os === 'macos' ? 'Mac' : 'PC'} included.</p>
+            <p class="q" id="make-{row.id}">{t('make.question', { name: row.name })}</p>
+            <p class="label">{t(app.me.os === 'macos' ? 'make.bodyShortMac' : 'make.bodyShortPc')}</p>
             <span class="actions">
-              <button class="btn quiet" onclick={() => (confirmId = null)}>Cancel</button>
-              <button class="btn go" onclick={() => { confirmId = null; actions.handOver(row.id); }}>Make listener</button>
+              <button class="btn quiet" onclick={() => (confirmId = null)}>{t('common.cancel')}</button>
+              <button class="btn go" onclick={() => { confirmId = null; actions.handOver(row.id); }}>{t('common.makeListener')}</button>
             </span>
           </div>
         {/if}
       {:else}
-        <p class="wait">{app.hosting.code ? "Waiting for audio senders. On another device, open Aonin, choose Join and type the code." : "Waiting for audio senders. Open Aonin on another device on this network."}</p>
+        <p class="wait">{app.hosting.code ? t('tray.waitingPrivate') : t('tray.waitingPublic')}</p>
       {/each}
     </section>
   {/if}
 
   {#if idle && !form && app.hosts.length > 0}
     <section class="block">
-      <div class="head"><span class="label">Listeners on this network</span></div>
+      <div class="head"><span class="label">{t('devices.listenersHere')}</span></div>
       {#each app.hosts as h (h.id)}
         <div class="hostrow" class:blocked={h.blocked}>
           <StatusMark mark={h.blocked ? 'error' : 'live'} />
           <div class="who">
             <span class="name">{h.name}</span>
-            <span class="label">{h.blocked ?? `${h.clients} ${h.clients === 1 ? 'audio sender' : 'audio senders'}`}</span>
+            <span class="label">{h.blocked ? tm(h.blocked) : tn('common.audioSenders', h.clients)}</span>
           </div>
           {#if !h.blocked}
-            <button class="btn" onclick={() => actions.connect(h.id)}>Connect</button>
+            <button class="btn" onclick={() => actions.connect(h.id)}>{t('common.connect')}</button>
           {/if}
         </div>
       {/each}
       <span class="alts">
-        <button class="btn quiet" onclick={() => (form = 'listen')}>Become listener</button>
-        <button class="btn quiet" onclick={() => (form = 'join')}>Join with code</button>
+        <button class="btn quiet" onclick={() => (form = 'listen')}>{t('common.becomeListener')}</button>
+        <button class="btn quiet" onclick={() => (form = 'join')}>{t('common.joinWithCode')}</button>
       </span>
     </section>
   {/if}
 
   <footer>
-    <button class="btn quiet quality" onclick={() => actions.openWindow('advanced')}>{QUALITY[app.quality].label}{#if !app.update} · {QUALITY[app.quality].detail.split(',')[0]}{/if}<ChevronRight size={12} strokeWidth={1.75} /></button>
+    <button class="btn quiet quality" onclick={() => actions.openWindow('advanced')}>{t(`quality.${app.quality}` as 'quality.cd')}{#if !app.update} · {t(`quality.${app.quality}Detail` as 'quality.cdDetail').split(',')[0]}{/if}<ChevronRight size={12} strokeWidth={1.75} /></button>
     <span class="spacer"></span>
-    {#if app.update}<button class="btn primary" onclick={actions.installUpdate} title="Install Aonin {app.update} and restart">Update</button>{/if}
-    <button class="btn quiet" onclick={() => actions.openWindow('devices')}>Open Aonin</button>
-    <button class="icon" onclick={actions.quit} aria-label="Quit Aonin"><Power size={14} strokeWidth={1.75} /></button>
+    {#if app.update}<button class="btn primary" onclick={actions.installUpdate} title={t('tray.updateTitle', { version: app.update })}>{t('tray.update')}</button>{/if}
+    <button class="btn quiet" onclick={() => actions.openWindow('devices')}>{t('common.openAonin')}</button>
+    <button class="icon" onclick={actions.quit} aria-label={t('common.quitAonin')}><Power size={14} strokeWidth={1.75} /></button>
   </footer>
 </div>
 

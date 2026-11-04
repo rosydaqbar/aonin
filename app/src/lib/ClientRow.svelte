@@ -4,6 +4,7 @@
   import StatusMark from './StatusMark.svelte';
   import { fmtMs, type ClientRow } from './state.svelte';
   import { actions } from './actions';
+  import { t } from './i18n/index.svelte';
 
   /** `lost`: the host's output device is gone, so nothing is actually playing. */
   /** `onmake`: offer to make this device the listener; `making`: that offer is open. */
@@ -12,13 +13,13 @@
 
   let what = $derived(
     row.mark === 'connecting'
-      ? 'Connecting…'
-      : [row.sends.system && 'System audio', row.sends.mic && 'mic'].filter(Boolean).join(' + ')
+      ? t('common.connecting')
+      : [row.sends.system && t('common.systemAudio'), row.sends.mic && t('tray.hearMic')].filter(Boolean).join(' + ')
   );
   // Muting never hides whether the device is still connected and healthy.
-  let latency = $derived(row.mark === 'connecting' ? 'Connecting…' : fmtMs(row.latencyMs));
-  let health = $derived(row.muted ? `Muted · ${latency}` : latency);
-  let note = $derived(row.mark !== 'degraded' ? null : wide ? `Unstable · ${row.recovered} repaired` : 'Unstable');
+  let latency = $derived(row.mark === 'connecting' ? t('common.connecting') : fmtMs(row.latencyMs));
+  let health = $derived(row.muted ? t('row.muted', { what: latency }) : latency);
+  let note = $derived(row.mark !== 'degraded' ? null : wide ? t('row.unstableRepaired', { n: row.recovered }) : t('row.unstable'));
   let mark = $derived(lost ? 'connecting' : row.muted ? 'muted' : row.mark);
 </script>
 
@@ -27,7 +28,7 @@
   <div class="who">
     <span class="name" title={row.name}>{row.name}</span>
     {#if wide}
-      <span class="label">{row.muted ? `Muted · ${what}` : (note ?? what)}</span>
+      <span class="label">{row.muted ? t('row.muted', { what }) : (note ?? what)}</span>
     {:else}
       <span class="label num" class:warn={row.mark === 'degraded'}>{note ?? health}</span>
     {/if}
@@ -43,21 +44,21 @@
     oninput={(e) => actions.setVolume(row.id, +e.currentTarget.value)}
     style:--p="{row.volume * 100}%"
     disabled={row.muted}
-    aria-label="Volume for {row.name}"
+    aria-label={t('row.volumeAria', { name: row.name })}
   />
   <button
       class="icon"
       class:on={row.muted}
       onclick={() => actions.setMuted(row.id, !row.muted)}
       aria-pressed={row.muted}
-      aria-label={row.muted ? `Unmute ${row.name}` : `Mute ${row.name}`}
+      aria-label={row.muted ? t('row.unmute', { name: row.name }) : t('row.mute', { name: row.name })}
     >
       {#if row.muted}<VolumeX size={15} strokeWidth={1.75} />{:else}<Volume2 size={15} strokeWidth={1.75} />{/if}
     </button>
   {#if wide}
-    <button class="btn make" onclick={onmake} disabled={!onmake}><ArrowLeftRight size={13} strokeWidth={1.75} />Make listener{#if locked}<span class="pro-tag">Pro</span>{/if}</button>
+    <button class="btn make" onclick={onmake} disabled={!onmake}><ArrowLeftRight size={13} strokeWidth={1.75} />{t('common.makeListener')}{#if locked}<span class="pro-tag">Pro</span>{/if}</button>
   {:else}
-    <button class="icon" class:active={making} onclick={onmake} disabled={!onmake} title={locked ? 'Make listener (Aonin Pro)' : 'Make listener'} aria-label={locked ? `Make ${row.name} the listener, needs Aonin Pro` : `Make ${row.name} the listener`} aria-expanded={making}><ArrowLeftRight size={14} strokeWidth={1.75} /></button>
+    <button class="icon" class:active={making} onclick={onmake} disabled={!onmake} title={locked ? t('make.titleLocked') : t('make.title')} aria-label={t(locked ? 'make.ariaLocked' : 'make.aria', { name: row.name })} aria-expanded={making}><ArrowLeftRight size={14} strokeWidth={1.75} /></button>
   {/if}
 </div>
 
@@ -71,7 +72,7 @@
     border-bottom: 1px solid var(--line);
   }
   .row.wide {
-    grid-template-columns: 8px minmax(120px, 1fr) auto 64px 100px 28px 124px;
+    grid-template-columns: 8px minmax(96px, 1fr) auto 64px 100px 28px minmax(124px, auto);
     gap: 12px;
     min-height: 52px;
   }

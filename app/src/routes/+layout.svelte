@@ -2,6 +2,9 @@
   import '$lib/theme.css';
   import { onMount } from 'svelte';
   import { app, followBackend } from '$lib/state.svelte';
+  import { initLanguage } from '$lib/i18n/index.svelte';
+
+  initLanguage();
 
   let { children } = $props();
   const inTauri = typeof window !== 'undefined' && '__TAURI_INTERNALS__' in window;

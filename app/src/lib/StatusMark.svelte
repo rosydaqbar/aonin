@@ -1,18 +1,12 @@
 <script lang="ts">
   import type { Mark } from './state.svelte';
+  import { t } from './i18n/index.svelte';
 
   let { mark }: { mark: Mark } = $props();
 
-  const words: Record<Mark, string> = {
-    live: 'live',
-    muted: 'muted',
-    connecting: 'connecting',
-    degraded: 'unstable connection',
-    error: 'problem',
-  };
 </script>
 
-<span class="mark {mark}" role="img" aria-label={words[mark]}></span>
+<span class="mark {mark}" role="img" aria-label={t(`mark.${mark}`)}></span>
 
 <style>
   .mark {

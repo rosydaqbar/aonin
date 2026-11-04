@@ -2,8 +2,10 @@
   /** Unlock Pro: what Pro adds, then the key field. Shown while
    *  `proModal.step` is set. */
   import { X } from '@lucide/svelte';
+  import ListenerNote from './ListenerNote.svelte';
   import ProFeatures from './ProFeatures.svelte';
   import { actions } from './actions';
+  import { t, tm } from './i18n/index.svelte';
   import { app, PRO_LINKS, proModal } from './state.svelte';
 
   let dialog: HTMLDialogElement;
@@ -36,55 +38,57 @@
         await actions.unlockPro();
       }
     } catch (err) {
-      error = String(err).replace(/^Error: /, '');
+      error = tm(String(err));
     }
     busy = 'idle';
   }
 </script>
 
 <dialog bind:this={dialog} onclose={() => (proModal.step = null)} aria-labelledby="pro-title" onclick={(e) => e.target === dialog && close()}>
-  <button class="x" onclick={close} aria-label="Close"><X size={15} strokeWidth={1.75} /></button>
+  <button class="x" onclick={close} aria-label={t('pro.close')}><X size={15} strokeWidth={1.75} /></button>
 
   {#if app.proUnlocked}
     <span class="pro-tag xl">Pro</span>
-    <h2 id="pro-title">Aonin Pro is unlocked</h2>
-    <p class="label">Everything in Pro is ready to use on this device.</p>
+    <h2 id="pro-title">{t('pro.unlocked')}</h2>
+    <p class="label">{t('pro.unlockedHint')}</p>
     <ProFeatures />
-    <div class="actions"><button class="btn primary" onclick={close}>Done</button></div>
+    <div class="actions"><button class="btn primary" onclick={close}>{t('pro.done')}</button></div>
   {:else if app.proReady}
     <span class="pro-tag xl">Pro</span>
-    <h2 id="pro-title">Aonin Pro is ready</h2>
-    <p class="label">Restart Aonin to finish. Your settings stay.</p>
-    <div class="actions"><button class="btn quiet" onclick={close}>Later</button><button class="btn primary" onclick={actions.installUpdate}>Restart to finish</button></div>
+    <h2 id="pro-title">{t('pro.ready')}</h2>
+    <p class="label">{t('pro.readyHint')}</p>
+    <div class="actions"><button class="btn quiet" onclick={close}>{t('pro.later')}</button><button class="btn primary" onclick={actions.installUpdate}>{t('pro.restartToFinish')}</button></div>
   {:else if proModal.step === 'key' || app.license}
     <span class="pro-tag xl">Pro</span>
-    <h2 id="pro-title">Enter your license key</h2>
+    <h2 id="pro-title">{t('pro.keyTitle')}</h2>
     {#if app.license}
-      <p class="label">License {app.license.id}. {busy === 'downloading' ? 'Downloading Aonin Pro, this takes a moment.' : 'Download Aonin Pro to unlock its features.'}</p>
+      <p class="label">{t(busy === 'downloading' ? 'pro.downloadingHint' : 'pro.downloadHint', { id: app.license.id })}</p>
       {#if error}<p class="label bad" role="alert">{error}</p>{/if}
-      <div class="actions"><button class="btn primary wide" onclick={() => unlock()} disabled={busy !== 'idle'}>{busy === 'downloading' ? 'Downloading…' : error ? 'Try again' : 'Download Aonin Pro'}</button></div>
+      <div class="actions"><button class="btn primary wide" onclick={() => unlock()} disabled={busy !== 'idle'}>{busy === 'downloading' ? t('pro.downloading') : error ? t('pro.tryAgain') : t('pro.download')}</button></div>
     {:else}
-      <p class="label">It’s in the email you got after buying. It starts with AONIN-.</p>
+      <p class="label">{t('pro.keyHint')}</p>
+      <ListenerNote />
       <form class="keyform" onsubmit={unlock}>
-        <input class="field" bind:this={input} bind:value={key} placeholder="AONIN-…" aria-label="License key" autocomplete="off" spellcheck="false" />
+        <input class="field" bind:this={input} bind:value={key} placeholder="AONIN-…" aria-label={t('pro.keyAria')} autocomplete="off" spellcheck="false" />
         {#if error}<p class="label bad" role="alert">{error}</p>{/if}
-        <button class="btn primary wide" disabled={!key.trim() || busy !== 'idle'}>{busy === 'checking' ? 'Checking…' : busy === 'downloading' ? 'Downloading…' : 'Unlock'}</button>
+        <button class="btn primary wide" disabled={!key.trim() || busy !== 'idle'}>{busy === 'checking' ? t('pro.checking') : busy === 'downloading' ? t('pro.downloading') : t('pro.unlock')}</button>
       </form>
       <div class="foot">
-        <span class="label">No key yet?</span>
-        <button class="link" onclick={buy}>Purchase</button>
+        <span class="label">{t('pro.noKey')}</span>
+        <button class="link" onclick={buy}>{t('pro.purchase')}</button>
         <span class="label" aria-hidden="true">·</span>
-        <button class="link" onclick={() => actions.openUrl(PRO_LINKS.request)}>Request a key</button>
+        <button class="link" onclick={() => actions.openUrl(PRO_LINKS.request)}>{t('pro.requestKey')}</button>
       </div>
     {/if}
   {:else}
     <span class="pro-tag xl">Pro</span>
-    <h2 id="pro-title">Unlock Pro features</h2>
-    <p class="label">One license, yours for life, with a year of updates.</p>
+    <h2 id="pro-title">{t('pro.unlockTitle')}</h2>
+    <p class="label">{t('pro.offer')}</p>
     <ProFeatures />
+    <ListenerNote />
     <div class="actions">
-      <button class="btn primary wide" onclick={buy}>Purchase</button>
-      <button class="btn wide" onclick={() => (proModal.step = 'key')}>Enter key</button>
+      <button class="btn primary wide" onclick={buy}>{t('pro.purchase')}</button>
+      <button class="btn wide" onclick={() => (proModal.step = 'key')}>{t('pro.enterKey')}</button>
     </div>
   {/if}
 </dialog>
@@ -106,6 +110,7 @@
   dialog[open] { display: flex; flex-direction: column; align-items: flex-start; gap: 6px; }
   dialog::backdrop { background: rgb(0 0 0 / 0.4); }
   dialog > :global(ul) { margin: 12px 0 4px; align-self: stretch; }
+  dialog > :global(.note) { margin-top: 8px; }
   .x { position: absolute; top: 12px; right: 12px; display: grid; place-items: center; width: 28px; height: 28px; border: 0; border-radius: 7px; background: none; color: var(--ink-2); cursor: pointer; }
   .x:hover { background: var(--recess); color: var(--ink); }
   h2 { font-size: 16px; font-weight: 700; margin-top: 10px; }

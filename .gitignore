@@ -6,3 +6,6 @@ node_modules/
 # Development plans stay local, never in the public repo
 /docs/*.md
 /CLAUDE.local.md
+
+# Copy reviews (local only)
+*.copy-review.md

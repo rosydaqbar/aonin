@@ -1,6 +1,7 @@
 <script lang="ts">
   /** Join a private listener by typing the code it shows. */
   import { actions } from './actions';
+  import { t, tm } from './i18n/index.svelte';
   import { app, normalizeCode } from './state.svelte';
 
   let { oncancel }: { oncancel: () => void } = $props();
@@ -26,9 +27,9 @@
 </script>
 
 <form class="join" onsubmit={submit}>
-  <h3>Join a private listener</h3>
+  <h3>{t('join.title')}</h3>
   <label class="field-wrap">
-    <span class="label">Type the code shown on the listener.</span>
+    <span class="label">{t('join.hint')}</span>
     <input
       class="field code"
       bind:this={input}
@@ -44,11 +45,11 @@
     />
   </label>
   <p id="join-status" class="status" class:bad={app.joinError && !app.joining} role={app.joinError ? 'alert' : 'status'}>
-    {#if app.joining}Looking for the listener…{:else if app.joinError}{app.joinError}{/if}
+    {#if app.joining}{t('join.looking')}{:else if app.joinError}{tm(app.joinError)}{/if}
   </p>
   <div class="actions">
-    <button type="button" class="btn quiet" onclick={cancel}>Cancel</button>
-    <button class="btn primary" disabled={!valid || app.joining}>{app.joining ? 'Joining…' : 'Join'}</button>
+    <button type="button" class="btn quiet" onclick={cancel}>{t('common.cancel')}</button>
+    <button class="btn primary" disabled={!valid || app.joining}>{app.joining ? t('join.joining') : t('common.join')}</button>
   </div>
 </form>
 

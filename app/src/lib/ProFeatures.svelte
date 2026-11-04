@@ -1,13 +1,14 @@
 <script lang="ts">
   /** What Aonin Pro unlocks, upcoming parts included. */
   import { Check } from '@lucide/svelte';
+  import { t } from './i18n/index.svelte';
 
-  const features = [
-    { title: 'Private listeners', detail: 'Only devices with the code can join.' },
-    { title: 'Make listener', detail: 'Hand the listener role to another device.' },
-    { title: 'Android and iOS apps', detail: 'Send and listen from your phone.', soon: true },
-    { title: 'A year of updates', detail: 'Everything new in Pro during that year.' },
-  ];
+  let features = $derived([
+    { title: t('pro.featPrivate'), detail: t('pro.featPrivateDetail') },
+    { title: t('pro.featMake'), detail: t('pro.featMakeDetail') },
+    { title: t('pro.featMobile'), detail: t('pro.featMobileDetail'), soon: true },
+    { title: t('pro.featUpdates'), detail: t('pro.featUpdatesDetail') },
+  ]);
 </script>
 
 <ul>
@@ -15,7 +16,7 @@
     <li>
       <span class="check" aria-hidden="true"><Check size={12} strokeWidth={2.5} /></span>
       <span class="text">
-        <span class="title">{f.title}{#if f.soon}<span class="soon">Coming soon</span>{/if}</span>
+        <span class="title">{f.title}{#if f.soon}<span class="soon">{t('pro.soon')}</span>{/if}</span>
         <span class="label">{f.detail}</span>
       </span>
     </li>

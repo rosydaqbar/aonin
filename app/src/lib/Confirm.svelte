@@ -7,6 +7,7 @@
     onconfirm,
     onclose,
   }: { title: string; body: string; action: string; onconfirm: () => void; onclose: () => void } = $props();
+  import { t } from './i18n/index.svelte';
   let dialog: HTMLDialogElement;
 
   $effect(() => {
@@ -18,7 +19,7 @@
   <h2 id="confirm-title">{title}</h2>
   <p>{body}</p>
   <form method="dialog">
-    <button class="btn quiet">Cancel</button>
+    <button class="btn quiet">{t('common.cancel')}</button>
     <button class="btn primary" onclick={onconfirm}>{action}</button>
   </form>
 </dialog>

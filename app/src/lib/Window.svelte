@@ -1,5 +1,5 @@
 <script lang="ts">
-  import { AudioLines, Copy, Download, Globe, Info, Lock, LogIn, Mic, Monitor, MonitorSmartphone, Network, Power, RefreshCw, SlidersHorizontal, Sparkles, VolumeX, Wifi } from '@lucide/svelte';
+  import { AudioLines, ArrowLeftRight, ChevronDown, Copy, Download, Globe, Info, Languages, Lock, LogIn, Mic, Monitor, MonitorSmartphone, Network, Power, RefreshCw, SlidersHorizontal, Sparkles, VolumeX, Wifi } from '@lucide/svelte';
   import ClientRow from './ClientRow.svelte';
   import EditionBadge from './EditionBadge.svelte';
   import Confirm from './Confirm.svelte';
@@ -7,11 +7,13 @@
   import JoinForm from './JoinForm.svelte';
   import ListenForm from './ListenForm.svelte';
   import Modal from './Modal.svelte';
+  import ListenerNote from './ListenerNote.svelte';
   import ProFeatures from './ProFeatures.svelte';
   import ProModal from './ProModal.svelte';
   import StatusMark from './StatusMark.svelte';
   import Switch from './Switch.svelte';
   import { actions, type Section } from './actions';
+  import { fmtDate, i18n, LANGUAGES, setLanguage, systemLang, t, tm, tn, type LangChoice } from './i18n/index.svelte';
   import { app, fmtCode, fmtMs, localNet, newCode, PRO_LINKS, proModal, QUALITY, roleLine, type Quality } from './state.svelte';
 
   const sections: Section[] = ['devices', 'audio', 'network', 'advanced', 'about'];
@@ -28,7 +30,6 @@
       check = 'failed';
     }
   }
-  const fmtDate = (d: string) => new Date(d + 'T00:00:00').toLocaleDateString(undefined, { day: 'numeric', month: 'short', year: 'numeric' });
   /** Make private / Make listener when Pro isn't unlocked: the Unlock Pro dialog. */
   const getPro = () => actions.getPro();
   let section = $state<Section>(readHash());
@@ -84,173 +85,180 @@
     <div class="vis">
       <span class="icon" aria-hidden="true"><Lock size={16} strokeWidth={1.75} /></span>
       <span class="text">
-        <span class="title">Private</span>
-        <span class="label">Devices already connected stay. New devices need the code: they type it under Join.</span>
+        <span class="title">{t('vis.private')}</span>
+        <span class="label">{t('vis.privateHint')}</span>
       </span>
-      <span class="bigcode code" aria-label="Code {code.split('').join(' ')}">{fmtCode(code)}</span>
-      <button class="btn" onclick={() => copyCode(code)}><Copy size={14} strokeWidth={1.75} />{copied ? 'Copied' : 'Copy code'}</button>
-      <button class="btn" onclick={() => actions.setPrivate(null)}><Globe size={14} strokeWidth={1.75} />Make public</button>
+      <span class="bigcode code" aria-label={t('common.codeAria', { code: code.split('').join(' ') })}>{fmtCode(code)}</span>
+      <button class="btn" onclick={() => copyCode(code)}><Copy size={14} strokeWidth={1.75} />{copied ? t('common.copied') : t('common.copyCode')}</button>
+      <button class="btn" onclick={() => actions.setPrivate(null)}><Globe size={14} strokeWidth={1.75} />{t('common.makePublic')}</button>
     </div>
   {:else if app.hosting}
     <div class="vis">
       <span class="icon" aria-hidden="true"><Globe size={16} strokeWidth={1.75} /></span>
       <span class="text">
-        <span class="title">Visible to public</span>
-        <span class="label">Anyone on this network can join.</span>
+        <span class="title">{t('vis.public')}</span>
+        <span class="label">{t('vis.publicHint')}</span>
       </span>
       {#if app.proUnlocked}
-        <button class="btn" onclick={makePrivate}><Lock size={14} strokeWidth={1.75} />Make private</button>
+        <button class="btn" onclick={makePrivate}><Lock size={14} strokeWidth={1.75} />{t('common.makePrivate')}</button>
       {:else}
-        <button class="btn" onclick={getPro}><Lock size={14} strokeWidth={1.75} />Make private<span class="pro-tag">Pro</span></button>
+        <button class="btn" onclick={getPro}><Lock size={14} strokeWidth={1.75} />{t('common.makePrivate')}<span class="pro-tag">Pro</span></button>
       {/if}
     </div>
   {/if}
 
   <div class="body">
-    <nav aria-label="Sections">
+    <nav aria-label={t('nav.sections')}>
       {#each sections as s}
         {@const Icon = sectionIcons[s]}
-        <a href="#{s}" aria-current={section === s ? 'page' : undefined}><Icon size={15} strokeWidth={1.75} aria-hidden="true" />{s[0].toUpperCase() + s.slice(1)}</a>
+        <a href="#{s}" aria-current={section === s ? 'page' : undefined}><Icon size={15} strokeWidth={1.75} aria-hidden="true" />{t(`nav.${s}`)}</a>
       {/each}
       {#if !app.proUnlocked}
-        <button class="getpro" onclick={() => actions.getPro()}><Sparkles size={15} strokeWidth={1.75} aria-hidden="true" />Get Pro</button>
+        <button class="getpro" onclick={() => actions.getPro()}><Sparkles size={15} strokeWidth={1.75} aria-hidden="true" />{t('nav.getPro')}</button>
       {/if}
-      <button class="quit" onclick={actions.quit}><Power size={14} strokeWidth={1.75} />Quit Aonin</button>
+      <label class="lang" title={t('advanced.languageHint')}>
+        <Languages size={15} strokeWidth={1.75} aria-hidden="true" />
+        <span class="current" aria-hidden="true">{(LANGUAGES[i18n.lang] as { short?: string }).short ?? LANGUAGES[i18n.lang].name}</span>
+        <ChevronDown size={13} strokeWidth={1.75} aria-hidden="true" />
+        <select aria-label={t('advanced.language')} value={i18n.choice} onchange={(e) => setLanguage(e.currentTarget.value as LangChoice)}>
+          <option value="system">{t('advanced.languageSystem', { language: LANGUAGES[systemLang()].name })}</option>
+          {#each Object.entries(LANGUAGES) as [code, l]}<option value={code} lang={l.tag}>{l.name}</option>{/each}
+        </select>
+      </label>
+      <button class="quit" onclick={actions.quit}><Power size={14} strokeWidth={1.75} />{t('common.quitAonin')}</button>
     </nav>
 
     <main>
       <Issues />
       {#if app.error}
-        <p class="alert" role="alert">{app.error}</p>
+        <p class="alert" role="alert">{tm(app.error)}</p>
       {/if}
       {#if app.outputLost}
-        <p class="alert" role="status">The output device isn't playing. It may be unplugged, or another app may be holding it. Aonin resumes as soon as it plays again.</p>
+        <p class="alert" role="status">{t('alert.outputLost')}</p>
       {/if}
 
       {#if section === 'devices'}
         {#if app.hosting}
           <div class="titlebar">
-            <h2>Audio senders</h2>
-            <span class="label">Playing to {app.hosting.output}</span>
-            <button class="btn" onclick={actions.stopHosting}>Stop listening</button>
+            <h2>{t('devices.audioSenders')}</h2>
+            <span class="label">{t('devices.playingTo', { device: app.hosting.output })}</span>
+            <button class="btn" onclick={actions.stopHosting}>{t('common.stopListening')}</button>
           </div>
           {#if app.hosting.clients.length}
-            <div class="cols label"><span></span><span>Device</span><span>Level</span><span class="r">Latency</span><span>Volume</span><span></span><span></span></div>
+            <div class="cols label"><span></span><span>{t('devices.colDevice')}</span><span>{t('devices.colLevel')}</span><span class="r">{t('devices.colLatency')}</span><span>{t('devices.colVolume')}</span><span></span><span class="btn ghost" aria-hidden="true"><ArrowLeftRight size={13} strokeWidth={1.75} />{t('common.makeListener')}{#if !app.proUnlocked}<span class="pro-tag">Pro</span>{/if}</span></div>
             {#each app.hosting.clients as row (row.id)}
               <ClientRow {row} wide lost={app.outputLost} locked={!app.proUnlocked} onmake={app.handingOver || app.hosting.code ? undefined : !app.proUnlocked ? getPro : () => (makeTarget = { id: row.id, name: row.name })} />
             {/each}
           {:else}
-            <p class="empty">{app.hosting.code ? "Waiting for audio senders. On another device, open Aonin, choose Join and type the code above." : "Waiting for audio senders. Open Aonin on another device on this network and it will appear here."}</p>
+            <p class="empty">{app.hosting.code ? t('devices.waitingPrivate') : t('devices.waitingPublic')}</p>
           {/if}
         {/if}
 
         {#if app.link}
           <div class="titlebar">
-            <h2>Connection</h2>
-            {#if !app.hosting}<button class="btn" onclick={() => (form = 'listen')}>Become listener</button>{/if}
+            <h2>{t('devices.connection')}</h2>
+            {#if !app.hosting}<button class="btn" onclick={() => (form = 'listen')}>{t('common.becomeListener')}</button>{/if}
           </div>
           <div class="panel">
             <div class="linkhead">
               <StatusMark mark={app.link.status === 'connected' ? 'live' : 'connecting'} />
               <span class="name">{app.link.host.name}</span>
-              <span class="label num">{app.link.status === 'connected' ? fmtMs(app.link.latencyMs) : 'Reconnecting…'}</span>
-              <button class="btn" onclick={actions.disconnect}>Disconnect</button>
+              <span class="label num">{app.link.status === 'connected' ? fmtMs(app.link.latencyMs) : t('common.reconnecting')}</span>
+              <button class="btn" onclick={actions.disconnect}>{t('common.disconnect')}</button>
             </div>
           </div>
 
           <div class="titlebar">
-            <h2>Send to {app.link.host.name}</h2>
-            <span class="label">From this {app.me.os === 'macos' ? 'Mac' : 'PC'}, played on {app.link.host.name}</span>
+            <h2>{t('devices.sendTo', { name: app.link.host.name })}</h2>
+            <span class="label">{t(app.me.os === 'macos' ? 'devices.sendFromMac' : 'devices.sendFromPc', { name: app.link.host.name })}</span>
           </div>
-          <Switch icon={Monitor} label="System audio" hint="Everything this device plays" checked={app.link.send.system} onchange={(on) => actions.setSend('system', on)} />
+          <Switch icon={Monitor} label={t('common.systemAudio')} hint={t('devices.systemAudioHint')} checked={app.link.send.system} onchange={(on) => actions.setSend('system', on)} />
           <Switch
             icon={VolumeX}
-            label="Mute speakers while sending"
-            hint={app.me.os === 'macos'
-              ? 'This Mac stays quiet while its audio plays on the listener. What Aonin plays still comes through.'
-              : 'This PC stays quiet while its audio plays on the listener, including what Aonin plays.'}
+            label={t('devices.muteSpeakers')}
+            hint={t(app.me.os === 'macos' ? 'devices.muteSpeakersMac' : 'devices.muteSpeakersPc')}
             checked={app.options.muteSpeakers}
             disabled={!app.link.send.system}
             onchange={(on) => actions.setMuteSpeakers(on)}
           />
-          <Switch icon={Mic} label="Microphone" hint={app.devices.mic || app.devices.defaultMic} checked={app.link.send.mic} onchange={(on) => actions.setSend('mic', on)} />
+          <Switch icon={Mic} label={t('common.microphone')} hint={app.devices.mic || app.devices.defaultMic} checked={app.link.send.mic} onchange={(on) => actions.setSend('mic', on)} />
 
           <div class="titlebar">
-            <h2>Hear from {app.link.host.name}</h2>
-            <span class="label">From {app.link.host.name}, played on this {app.me.os === 'macos' ? 'Mac' : 'PC'}</span>
+            <h2>{t('devices.hearFrom', { name: app.link.host.name })}</h2>
+            <span class="label">{t(app.me.os === 'macos' ? 'devices.hearOnMac' : 'devices.hearOnPc', { name: app.link.host.name })}</span>
           </div>
-          <Switch icon={Monitor} label="System audio" hint="What {app.link.host.name}'s apps play, without the mix" checked={app.link.hear.system} onchange={(on) => actions.setHear('system', on)} />
-          <Switch icon={Mic} label="Microphone" hint="{app.link.host.name}'s microphone" checked={app.link.hear.mic} onchange={(on) => actions.setHear('mic', on)} />
+          <Switch icon={Monitor} label={t('common.systemAudio')} hint={t('devices.hearSystemHint', { name: app.link.host.name })} checked={app.link.hear.system} onchange={(on) => actions.setHear('system', on)} />
+          <Switch icon={Mic} label={t('common.microphone')} hint={t('devices.hearMicHint', { name: app.link.host.name })} checked={app.link.hear.mic} onchange={(on) => actions.setHear('mic', on)} />
         {/if}
 
         {#if !app.hosting && !app.link}
           <div class="titlebar">
-            <h2>Listeners on this network</h2>
+            <h2>{t('devices.listenersHere')}</h2>
             {#if app.hosts.length}
               <span class="pair">
-                <button class="btn" onclick={() => (form = 'join')}>Join with code</button>
-                <button class="btn" onclick={() => (form = 'listen')}>Become listener</button>
+                <button class="btn" onclick={() => (form = 'join')}>{t('common.joinWithCode')}</button>
+                <button class="btn" onclick={() => (form = 'listen')}>{t('common.becomeListener')}</button>
               </span>
             {/if}
           </div>
           {#if app.hosts.length === 0}
             <div class="solo">
-              <p>No listener on this network yet.</p>
+              <p>{t('devices.noListener')}</p>
               <span class="pair">
-                <button class="btn primary" onclick={() => (form = 'listen')}>Become listener</button>
-                <button class="btn" onclick={() => (form = 'join')}>Join</button>
+                <button class="btn primary" onclick={() => (form = 'listen')}>{t('common.becomeListener')}</button>
+                <button class="btn" onclick={() => (form = 'join')}>{t('common.join')}</button>
               </span>
-              <p class="label">Joining a private listener? Use Join and type its code.</p>
+              <p class="label">{t('devices.joinPrivateHint')}</p>
             </div>
           {/if}
         {/if}
 
         {#if (app.hosting || !app.link) && others.length}
-          {#if app.hosting}<div class="titlebar"><h2>Other listeners</h2></div>{/if}
+          {#if app.hosting}<div class="titlebar"><h2>{t('devices.otherListeners')}</h2></div>{/if}
           {#each others as h (h.id)}
             <div class="hostrow">
               <StatusMark mark={h.blocked ? 'error' : 'live'} />
               <div class="who">
                 <span class="name">{h.name}</span>
-                <span class="label" class:bad={h.blocked}>{h.blocked ?? `Listening · ${h.clients} ${h.clients === 1 ? 'audio sender' : 'audio senders'}`}</span>
+                <span class="label" class:bad={h.blocked}>{h.blocked ? tm(h.blocked) : tn('devices.listeningSenders', h.clients)}</span>
               </div>
-              {#if !h.blocked}<button class="btn" onclick={() => actions.connect(h.id)}>Connect</button>{/if}
+              {#if !h.blocked}<button class="btn" onclick={() => actions.connect(h.id)}>{t('common.connect')}</button>{/if}
             </div>
           {/each}
         {/if}
       {:else if section === 'audio'}
-        <div class="titlebar"><h2>Audio devices</h2></div>
+        <div class="titlebar"><h2>{t('audio.title')}</h2></div>
         <div class="form">
-          <label><span>Play everything on</span>
+          <label><span>{t('audio.playOn')}</span>
             <select value={app.devices.output} onchange={(e) => actions.setDevice('output', e.currentTarget.value)}>
-              <option value="">System default ({app.devices.defaultOutput || 'none'})</option>
+              <option value="">{t('common.systemDefault', { device: app.devices.defaultOutput || t('common.none') })}</option>
               {#each app.devices.outputs as d}<option value={d}>{d}</option>{/each}
             </select>
-            <span class="label">Where the mix comes out when this device is the listener. Follows the system default unless you pick one.</span></label>
-          <label><span>System audio from</span>
+            <span class="label">{t('audio.playOnHint')}</span></label>
+          <label><span>{t('audio.systemFrom')}</span>
             <select value={app.devices.systemSource} onchange={(e) => actions.setDevice('systemSource', e.currentTarget.value)}>
-              <option value="">System default ({app.devices.defaultOutput || 'none'})</option>
+              <option value="">{t('common.systemDefault', { device: app.devices.defaultOutput || t('common.none') })}</option>
               {#each app.devices.outputs as d}<option value={d}>{d}</option>{/each}
             </select>
-            <span class="label">The output whose sound is sent to the listener.</span></label>
-          <label><span>Microphone</span>
+            <span class="label">{t('audio.systemFromHint')}</span></label>
+          <label><span>{t('common.microphone')}</span>
             <select value={app.devices.mic} onchange={(e) => actions.setDevice('mic', e.currentTarget.value)}>
-              <option value="">System default ({app.devices.defaultMic || 'none'})</option>
+              <option value="">{t('common.systemDefault', { device: app.devices.defaultMic || t('common.none') })}</option>
               {#each app.devices.mics as d}<option value={d}>{d}</option>{/each}
             </select>
-            <span class="label">Used when “Send microphone” is on.</span></label>
+            <span class="label">{t('audio.micHint')}</span></label>
         </div>
       {:else if section === 'network'}
-        <div class="titlebar"><h2>Connection health</h2></div>
+        <div class="titlebar"><h2>{t('network.health')}</h2></div>
         {#if app.stats.length}
           <table>
-            <thead><tr class="label"><th></th><th>Device</th><th class="r">Latency</th><th class="r">Repaired</th><th class="r">Covered gaps</th><th class="r">Dropouts</th></tr></thead>
+            <thead><tr class="label"><th></th><th>{t('devices.colDevice')}</th><th class="r">{t('devices.colLatency')}</th><th class="r">{t('network.colRepaired')}</th><th class="r">{t('network.colCovered')}</th><th class="r">{t('network.colDropouts')}</th></tr></thead>
             <tbody>
               {#each app.stats as s}
                 <tr>
                   <td class="dot"><StatusMark mark={s.dropouts > 0 ? 'error' : s.concealed > 0 ? 'degraded' : 'live'} /></td>
                   <td>{s.name}</td>
-                  <td class="num r">{fmtMs(s.bufferMs)} <span class="label">target {fmtMs(s.targetMs)}</span></td>
+                  <td class="num r">{fmtMs(s.bufferMs)} <span class="label">{t('network.target', { ms: fmtMs(s.targetMs) })}</span></td>
                   <td class="num r">{s.recovered}</td>
                   <td class="num r" class:warnc={s.concealed > 0}>{s.concealed}</td>
                   <td class="num r" class:badc={s.dropouts > 0}>{s.dropouts}</td>
@@ -259,150 +267,151 @@
             </tbody>
           </table>
           <dl class="legend">
-            <dt>Repaired</dt><dd>Packets Wi-Fi lost that Aonin got back in time. Nothing was lost.</dd>
-            <dt>Covered gaps</dt><dd>Packets that never arrived, smoothed over. Above zero means some audio was filled in.</dd>
-            <dt>Dropouts</dt><dd>The buffer ran dry and sound paused. Aonin raises the buffer after each one.</dd>
+            <dt>{t('network.colRepaired')}</dt><dd>{t('network.repairedHelp')}</dd>
+            <dt>{t('network.colCovered')}</dt><dd>{t('network.coveredHelp')}</dd>
+            <dt>{t('network.colDropouts')}</dt><dd>{t('network.dropoutsHelp')}</dd>
           </dl>
         {:else}
-          <p class="empty">Nothing is streaming right now.</p>
+          <p class="empty">{t('network.idle')}</p>
         {/if}
         {#if app.me.os === 'macos'}
-          <div class="titlebar"><h2>Local network access</h2></div>
+          <div class="titlebar"><h2>{t('network.localAccess')}</h2></div>
           <div class="update">
             <span class="icon" aria-hidden="true"><Network size={16} strokeWidth={1.75} /></span>
             <span class="text">
-              <span>{app.issues.includes('localNetwork') ? 'macOS is blocking Aonin from this network' : 'Aonin can reach this network'}</span>
+              <span>{app.issues.includes('localNetwork') ? t('network.blocked') : t('network.reachable')}</span>
               {#if localNet.ask === 'asking'}
-                <span class="label">Asking macOS… Watch for its prompt and choose Allow.</span>
+                <span class="label">{t('network.asking')}</span>
               {:else if localNet.ask === 'done' && app.issues.includes('localNetwork')}
-                <span class="label bad">macOS didn't ask again: it asks only once per app. Open settings and switch Aonin on under Local Network.</span>
+                <span class="label bad">{t('network.didntAsk')}</span>
               {:else}
-                <span class="label">macOS asks once. If it never asked, or Aonin is missing from Privacy &amp; Security › Local Network, ask again. Then switch Aonin on there.</span>
+                <span class="label">{t('network.askHelp')}</span>
               {/if}
             </span>
-            <button class="btn" onclick={actions.askLocalNetwork} disabled={localNet.ask === 'asking'}>{localNet.ask === 'asking' ? 'Asking…' : 'Ask again'}</button>
-            <button class="btn" class:primary={localNet.ask === 'done' && app.issues.includes('localNetwork')} onclick={() => actions.fixIssue('localNetwork')}>Open settings</button>
+            <button class="btn" onclick={actions.askLocalNetwork} disabled={localNet.ask === 'asking'}>{localNet.ask === 'asking' ? t('network.askingShort') : t('network.askAgain')}</button>
+            <button class="btn" class:primary={localNet.ask === 'done' && app.issues.includes('localNetwork')} onclick={() => actions.fixIssue('localNetwork')}>{t('common.openSettings')}</button>
           </div>
-          <div class="titlebar"><h2>Wi-Fi</h2></div>
-          <Switch icon={Wifi} label="Keep Wi-Fi steady" hint="Turns off AirDrop and Handoff scanning, which makes Mac Wi-Fi stall every few seconds. Asks for your password; back on when you switch this off or restart." checked={app.options.quietWifi} onchange={(on) => actions.setQuietWifi(on)} />
+          <div class="titlebar"><h2>{t('network.wifi')}</h2></div>
+          <Switch icon={Wifi} label={t('network.steadyWifi')} hint={t('network.steadyWifiHint')} checked={app.options.quietWifi} onchange={(on) => actions.setQuietWifi(on)} />
         {/if}
       {:else if section === 'about'}
         <div class="about">
           <img src="/favicon.png" alt="" width="64" height="64" />
           <div>
             <h2>Aonin</h2>
-            <p class="label">Version {app.version}</p>
+            <p class="label">{t('about.version', { version: app.version })}</p>
           </div>
         </div>
-        <p class="overview">Aonin brings the audio of the computers on your local network into one place, in real time and at the highest quality over Wi-Fi. Any computer can be the listener; the others send their audio to it and can hear the listener back. No account and no server: everything stays on your network.</p>
+        <p class="overview">{t('about.overview')}</p>
 
-        <div class="titlebar"><h2>Updates</h2></div>
+        <div class="titlebar"><h2>{t('about.updates')}</h2></div>
         <div class="update">
           <span class="icon" aria-hidden="true"><Download size={16} strokeWidth={1.75} /></span>
           <span class="text">
             {#if app.update}
-              <span>Aonin {app.update} is ready</span>
-              <span class="label">Restarting takes a few seconds. Aonin reconnects after.</span>
+              <span>{t('about.updateReady', { version: app.update })}</span>
+              <span class="label">{t('about.updateReadyHint')}</span>
             {:else if check === 'checking'}
-              <span>Checking for updates…</span>
-              <span class="label">A newer version downloads in the background.</span>
+              <span>{t('about.checking')}</span>
+              <span class="label">{t('about.checkingHint')}</span>
             {:else if check === 'latest'}
-              <span>Aonin {app.version} is the latest version</span>
-              <span class="label">Aonin also checks by itself every few hours.</span>
+              <span>{t('about.latest', { version: app.version })}</span>
+              <span class="label">{t('about.latestHint')}</span>
             {:else if check === 'failed'}
-              <span>Couldn’t check for updates</span>
-              <span class="label bad">GitHub couldn’t be reached. Check the internet connection and try again.</span>
+              <span>{t('about.checkFailed')}</span>
+              <span class="label bad">{t('about.checkFailedHint')}</span>
             {:else}
-              <span>Aonin {app.version}</span>
-              <span class="label">Checks for updates by itself and downloads them in the background.</span>
+              <span>{t('about.current', { version: app.version })}</span>
+              <span class="label">{t('about.currentHint')}</span>
             {/if}
           </span>
           {#if app.update}
-            <button class="btn primary" onclick={actions.installUpdate}>Restart to update</button>
+            <button class="btn primary" onclick={actions.installUpdate}>{t('about.restartToUpdate')}</button>
           {:else}
-            <button class="btn" onclick={checkNow} disabled={check === 'checking'}>Check for updates</button>
+            <button class="btn" onclick={checkNow} disabled={check === 'checking'}>{t('about.checkForUpdates')}</button>
           {/if}
         </div>
 
-        <div class="titlebar"><h2>Aonin Pro</h2></div>
+        <div class="titlebar"><h2>{t('pro.title')}</h2></div>
         <div class="procard">
           {#if app.proUnlocked && app.license}
             <div class="prohead">
               <span class="pro-tag xl">Pro</span>
               <span class="text">
-                <span class="strong">Aonin Pro is unlocked</span>
-                <span class="label">License {app.license.id} · updates until {fmtDate(app.license.updatesUntil)}</span>
+                <span class="strong">{t('pro.unlocked')}</span>
+                <span class="label">{t('pro.licenseLine', { id: app.license.id, date: fmtDate(app.license.updatesUntil) })}</span>
               </span>
-              <button class="btn quiet" onclick={actions.clearLicense}>Remove key</button>
+              <button class="btn quiet" onclick={actions.clearLicense}>{t('pro.removeKey')}</button>
             </div>
           {:else if app.proReady}
             <div class="prohead">
               <span class="pro-tag xl">Pro</span>
               <span class="text">
-                <span class="strong">Aonin Pro is ready</span>
-                <span class="label">Restart Aonin to finish. Your settings stay.</span>
+                <span class="strong">{t('pro.ready')}</span>
+                <span class="label">{t('pro.readyHint')}</span>
               </span>
-              <button class="btn primary" onclick={actions.installUpdate}>Restart to finish</button>
+              <button class="btn primary" onclick={actions.installUpdate}>{t('pro.restartToFinish')}</button>
             </div>
           {:else if app.license && app.edition === 'pro'}
             <div class="prohead">
               <span class="pro-tag xl">Pro</span>
               <span class="text">
-                <span class="strong">Your Pro updates ended on {fmtDate(app.license.updatesUntil)}</span>
-                <span class="label">Renew to use Pro in this version.</span>
+                <span class="strong">{t('pro.updatesEnded', { date: fmtDate(app.license.updatesUntil) })}</span>
+                <span class="label">{t('pro.updatesEndedHint')}</span>
               </span>
-              <button class="btn primary" onclick={() => actions.openUrl(PRO_LINKS.buy)}>Renew</button>
+              <button class="btn primary" onclick={() => actions.openUrl(PRO_LINKS.buy)}>{t('pro.renew')}</button>
             </div>
           {:else}
             <div class="prohead">
               <span class="pro-tag xl">Pro</span>
               <span class="text">
-                <span class="strong">Unlock Pro features</span>
-                <span class="label">One license, yours for life, with a year of updates.</span>
+                <span class="strong">{t('pro.unlockTitle')}</span>
+                <span class="label">{t('pro.offer')}</span>
               </span>
             </div>
             <ProFeatures />
+            <ListenerNote />
             <div class="proactions">
               {#if app.license}
-                <button class="btn primary" onclick={() => actions.getPro('key')}>Download Aonin Pro</button>
-                <span class="label">License {app.license.id}</span>
+                <button class="btn primary" onclick={() => actions.getPro('key')}>{t('pro.download')}</button>
+                <span class="label">{t('pro.licenseId', { id: app.license.id })}</span>
               {:else}
-                <button class="btn primary" onclick={() => actions.openUrl(PRO_LINKS.buy)}>Purchase</button>
-                <button class="btn" onclick={() => actions.getPro('key')}>Enter key</button>
+                <button class="btn primary" onclick={() => actions.openUrl(PRO_LINKS.buy)}>{t('pro.purchase')}</button>
+                <button class="btn" onclick={() => actions.getPro('key')}>{t('pro.enterKey')}</button>
               {/if}
             </div>
           {/if}
         </div>
 
-        <div class="titlebar"><h2>License</h2></div>
-        <p class="legal">© 2026 Rosyd Aqbar. Aonin is free software under the GNU General Public License, version 3 or later. It comes with no warranty.</p>
+        <div class="titlebar"><h2>{t('about.license')}</h2></div>
+        <p class="legal">{t('about.legal')}</p>
         <p class="links">
-          <button class="link" onclick={() => actions.openUrl(REPO)}>Source code on GitHub</button>
-          <button class="link" onclick={() => actions.openUrl(REPO + '/blob/main/LICENSE')}>Read the license</button>
+          <button class="link" onclick={() => actions.openUrl(REPO)}>{t('about.source')}</button>
+          <button class="link" onclick={() => actions.openUrl(REPO + '/blob/main/LICENSE')}>{t('about.readLicense')}</button>
         </p>
       {:else}
-        <div class="titlebar"><h2>Quality</h2><span class="label">For audio this device sends</span></div>
-        <div class="radios" role="radiogroup" aria-label="Quality">
+        <div class="titlebar"><h2>{t('advanced.quality')}</h2><span class="label">{t('advanced.qualityHint')}</span></div>
+        <div class="radios" role="radiogroup" aria-label={t('advanced.quality')}>
           {#each Object.entries(QUALITY) as [key, q]}
             <label class="radio">
               <input type="radio" name="quality" value={key} checked={app.quality === key} onchange={() => actions.setQuality(key as Quality)} />
               <span class="dotbox" aria-hidden="true"></span>
-              <span class="qname">{q.label}</span>
-              <span class="label">{q.detail}</span>
-              <span class="label num r">{q.rate}</span>
+              <span class="qname">{t(`quality.${key}` as 'quality.cd')}</span>
+              <span class="label">{t(`quality.${key}Detail` as 'quality.cdDetail')}</span>
+              <span class="label num r">{t('quality.rate', { rate: q.rate })}</span>
             </label>
           {/each}
         </div>
-        <div class="titlebar"><h2>Startup</h2></div>
-        <Switch icon={RefreshCw} label="Reconnect automatically" hint="Send to the last listener as soon as Aonin opens" checked={app.options.reconnect} onchange={(on) => actions.setReconnect(on)} />
-        <Switch icon={LogIn} label="Open at login" hint="Start Aonin in the background when you sign in" checked={app.options.startAtLogin} onchange={(on) => actions.setStartAtLogin(on)} />
+        <div class="titlebar"><h2>{t('advanced.startup')}</h2></div>
+        <Switch icon={RefreshCw} label={t('advanced.reconnect')} hint={t('advanced.reconnectHint')} checked={app.options.reconnect} onchange={(on) => actions.setReconnect(on)} />
+        <Switch icon={LogIn} label={t('advanced.openAtLogin')} hint={t('advanced.openAtLoginHint')} checked={app.options.startAtLogin} onchange={(on) => actions.setStartAtLogin(on)} />
       {/if}
     </main>
   </div>
 </div>
 
 {#if form}
-  <Modal label={form === 'listen' ? 'Become the listener' : 'Join a private listener'} onclose={() => { if (form === 'join') actions.cancelJoin(); form = null; }}>
+  <Modal label={form === 'listen' ? t('listen.title') : t('join.title')} onclose={() => { if (form === 'join') actions.cancelJoin(); form = null; }}>
     {#if form === 'listen'}
       <ListenForm oncancel={() => (form = null)} ondone={() => (form = null)} />
     {:else}
@@ -414,12 +423,12 @@
   <ProModal />
 {/if}
 {#if makeTarget}
-  {@const t = makeTarget}
+  {@const mt = makeTarget}
   <Confirm
-    title="Make {t.name} the listener?"
-    body="Everyone's audio will play on {t.name}, and this {app.me.os === 'macos' ? 'Mac' : 'PC'} will send its audio there."
-    action="Make listener"
-    onconfirm={() => actions.handOver(t.id)}
+    title={t('make.question', { name: mt.name })}
+    body={t(app.me.os === 'macos' ? 'make.bodyMac' : 'make.bodyPc', { name: mt.name })}
+    action={t('common.makeListener')}
+    onconfirm={() => actions.handOver(mt.id)}
     onclose={() => (makeTarget = null)}
   />
 {/if}
@@ -456,8 +465,13 @@
   .prohead .text { flex: 1; display: flex; flex-direction: column; gap: 1px; min-width: 0; }
   .strong { font-weight: 700; }
   .proactions { display: flex; align-items: center; gap: 8px; }
+  /* Language: shows the current one; the real select sits on top, see-through. */
+  .lang { position: relative; margin-top: auto; display: flex; align-items: center; gap: 10px; padding: 8px 10px; border-radius: 6px; color: var(--ink-2); cursor: pointer; }
+  .lang .current { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .lang:hover { background: var(--recess); color: var(--ink); }
+  .lang:focus-within { outline: 2px solid var(--focus); outline-offset: -2px; }
+  .lang select { position: absolute; inset: 0; width: 100%; height: 100%; opacity: 0; cursor: pointer; font: inherit; }
   .quit {
-    margin-top: auto;
     display: flex;
     align-items: center;
     gap: 8px;
@@ -475,8 +489,10 @@
   .titlebar .label { margin-left: auto; }
   .titlebar .label + .btn { margin-left: 0; }
   .titlebar h2 + .btn { margin-left: auto; }
-  .cols { display: grid; grid-template-columns: 8px minmax(120px, 1fr) 105px 64px 100px 28px 124px; gap: 12px; padding-bottom: 6px; border-bottom: 1px solid var(--line); }
+  .cols { display: grid; grid-template-columns: 8px minmax(96px, 1fr) 105px 64px 100px 28px minmax(124px, auto); gap: 12px; padding-bottom: 6px; border-bottom: 1px solid var(--line); }
   .r { text-align: right; }
+  /* Same width as the Make listener buttons below, so the columns line up. */
+  .ghost { visibility: hidden; height: 0; padding: 0 13px; border: 0; display: inline-flex; gap: 6px; white-space: nowrap; overflow: hidden; }
   .empty { color: var(--ink-2); padding: 14px 0; }
   .alert { margin-top: 16px; padding: 10px 12px; border-radius: 8px; background: var(--red-wash); }
   .panel { border-top: 1px solid var(--line); }

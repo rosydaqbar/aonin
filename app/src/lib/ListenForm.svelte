@@ -4,6 +4,7 @@
   import { Lock, RefreshCw } from '@lucide/svelte';
   import Switch from './Switch.svelte';
   import { actions } from './actions';
+  import { t } from './i18n/index.svelte';
   import { app, fmtCode, newCode } from './state.svelte';
 
   let { oncancel, ondone }: { oncancel: () => void; ondone?: () => void } = $props();
@@ -26,28 +27,28 @@
 </script>
 
 <form class="listen" onsubmit={submit}>
-  <h3>Become the listener</h3>
+  <h3>{t('listen.title')}</h3>
   <label class="name">
-    <span class="label">Name</span>
+    <span class="label">{t('listen.name')}</span>
     <input class="field" bind:this={input} bind:value={name} maxlength="40" placeholder={app.me.name} autocomplete="off" spellcheck="false" />
   </label>
   {#if app.proUnlocked}
-    <Switch icon={Lock} label="Make private" hint="Only devices with the code can join. It won't show up for anyone else." bind:checked={priv} />
+    <Switch icon={Lock} label={t('common.makePrivate')} hint={t('listen.privateHint')} bind:checked={priv} />
   {:else}
-    <Switch icon={Lock} label="Make private" tag="Pro" hint="Only devices with the code can join. It won't show up for anyone else." onlocked={() => actions.getPro()} />
+    <Switch icon={Lock} label={t('common.makePrivate')} tag="Pro" hint={t('listen.privateHint')} onlocked={() => actions.getPro()} />
   {/if}
   {#if priv}
     <div class="codebox">
       <span class="text">
-        <span class="label">Code for audio senders</span>
-        <span class="code big" aria-label="Code {code.split('').join(' ')}">{fmtCode(code)}</span>
+        <span class="label">{t('listen.codeLabel')}</span>
+        <span class="code big" aria-label={t('common.codeAria', { code: code.split('').join(' ') })}>{fmtCode(code)}</span>
       </span>
-      <button type="button" class="btn quiet" onclick={() => (code = newCode())}><RefreshCw size={13} strokeWidth={1.75} />New code</button>
+      <button type="button" class="btn quiet" onclick={() => (code = newCode())}><RefreshCw size={13} strokeWidth={1.75} />{t('listen.newCode')}</button>
     </div>
   {/if}
   <div class="actions">
-    <button type="button" class="btn quiet" onclick={oncancel}>Cancel</button>
-    <button class="btn primary">Start listening</button>
+    <button type="button" class="btn quiet" onclick={oncancel}>{t('common.cancel')}</button>
+    <button class="btn primary">{t('listen.start')}</button>
   </div>
 </form>
 

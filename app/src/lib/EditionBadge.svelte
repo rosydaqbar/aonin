@@ -1,12 +1,13 @@
 <script lang="ts">
   import { app } from './state.svelte';
+  import { t } from './i18n/index.svelte';
 </script>
 
 <!-- Which Aonin this is, next to the computer name in the dark strip. -->
 {#if app.proUnlocked}
-  <span class="pro-tag lg" title="Aonin Pro {app.version}">Pro</span>
+  <span class="pro-tag lg" title={t('edition.proTitle', { version: app.version })}>Pro</span>
 {:else}
-  <span class="free" title="Aonin {app.version}">Free</span>
+  <span class="free" title={t('edition.freeTitle', { version: app.version })}>{t('edition.free')}</span>
 {/if}
 
 <style>

@@ -2,6 +2,8 @@
 // backend owns it and pushes snapshots; in a plain browser (design review)
 // a demo scenario is loaded from `?demo=<name>`.
 
+import { t, tn } from './i18n/index.svelte';
+
 export type Os = 'windows' | 'macos';
 export type Quality = 'highest' | 'cd' | 'balanced' | 'saver';
 
@@ -248,17 +250,17 @@ export async function followBackend() {
 /** A device reads as "connected somewhere" in the strip. `short`: the
  *  narrow menu strip, where the device count is shown below anyway. */
 export function roleLine(s: AppState, short = false): string {
-  if (s.issues.length) return 'Needs permission';
-  if (s.handingOver) return short ? 'Handing over…' : `Handing over to ${s.handingOver}…`;
-  if (s.hosting && s.outputLost) return 'Output lost';
-  if (s.hosting && s.link) return short ? 'Listening' : 'Listening · also sending';
+  if (s.issues.length) return t('role.needsPermission');
+  if (s.handingOver) return short ? t('role.handingOverShort') : t('role.handingOver', { name: s.handingOver });
+  if (s.hosting && s.outputLost) return t('role.outputLost');
+  if (s.hosting && s.link) return short ? t('role.listening') : t('role.listeningAlsoSending');
   if (s.hosting) {
-    if (short) return 'Listening';
+    if (short) return t('role.listening');
     const n = s.hosting.clients.length;
-    return n === 0 ? 'Listening · no audio senders yet' : `Listening · ${n} ${n === 1 ? 'audio sender' : 'audio senders'}`;
+    return n === 0 ? t('role.listeningNoSenders') : tn('role.listeningSenders', n);
   }
-  if (s.link) return s.link.status === 'connected' ? 'Connected' : 'Reconnecting…';
-  return 'Not connected';
+  if (s.link) return s.link.status === 'connected' ? t('role.connected') : t('common.reconnecting');
+  return t('role.notConnected');
 }
 
 export function fmtMs(ms: number): string {
@@ -267,5 +269,5 @@ export function fmtMs(ms: number): string {
 
 /** The Unlock Pro dialog in the main window: the offer, or the key field. */
 export const proModal = $state<{ step: null | 'offer' | 'key' }>({ step: null });
-/** Where to buy Aonin Pro, and where to ask for a key. */
-export const PRO_LINKS = { buy: 'https://aonin.app/pro', request: 'https://discord.gg/2cQBYaNHjC' };
+/** Where to buy Aonin Pro (Aonin's page on lfg.ink), and where to ask for a key. */
+export const PRO_LINKS = { buy: 'https://lfg.ink/aonin', request: 'https://discord.gg/2cQBYaNHjC' };
