@@ -17,19 +17,11 @@ Aonin runs on **Windows and macOS** from the system tray or menu bar. It support
 
 ## Aonin Pro
 
-Aonin is free. **Aonin Pro** includes:
-
-- **Private listeners:** A listener displays a 6-character code. Audio senders must enter the code to connect. Audio in private sessions is encrypted.
-- **Make listener:** Transfer the listener role to an audio sender. All other audio senders follow the new listener.
-- **Android and iOS apps:** Planned for a future release.
-
-One license covers 2 computers for life and includes one year of updates. Activate Pro on the listener, where private sessions and listener switching are controlled. Audio senders don't need Pro.
-
-To activate Pro, open the **Unlock Pro features** dialog from a Pro feature in the app and enter your license key. Aonin downloads the Pro version and prompts you to restart.
+Aonin is free. Aonin Pro adds private listeners and lets you transfer the listener role to another device. Android and iOS apps are planned.
 
 More on [lfg.ink/aonin](https://lfg.ink/aonin).
 
-A separate private repository contains the Pro features. This repository builds the free version, with `crates/aon-pro` serving as a stub for Pro integration.
+This repository contains the free version's source code.
 
 ## How it works
 
@@ -116,39 +108,18 @@ Run the tests with `cargo test`.
 
 ## Roadmap
 
-### Done
-
-- [x] Highest-quality streaming with redundancy, retransmit and an adaptive jitter buffer
-- [x] System audio and mic capture on Windows and macOS, no drivers
-- [x] LAN discovery, listener and audio sender roles, loop detection, auto-reconnect
-- [x] Tray / menu bar app with per-device volume, mute and live meters
-- [x] Quality tiers: Highest, CD (16-bit), Balanced and Saver (Opus)
-- [x] Two-way audio: hear the listener's audio and mic on an audio sender
-- [x] Never records Aonin's own playback (no echo, no loops)
-- [x] Pick audio devices; recover automatically when the output is unplugged or changes
-- [x] Open at login, and an optional "keep Wi-Fi steady" switch on macOS (turns off AWDL)
-- [x] Installers built by GitHub Actions (Windows NSIS, macOS DMG)
-- [x] Automatic updates, signed
-- [x] Five languages: English, Bahasa Indonesia, French, Spanish, Simplified Chinese
-
-### V1
-
-- [x] Hand the listener role to another device, with every audio sender following it (Pro)
-- [x] Private sessions, phase 1: a private listener shows a code, audio senders join with it, and the audio is encrypted (Pro)
-- [x] Aonin Pro license keys, unlocked from the app
-- [ ] Private sessions, phase 2: sign in with email and password, or Google, so your own devices trust each other without a code
-
-### V1.1
-
-- [ ] Android and iOS: listen and send the mic first, then listener, then system audio where the OS allows it.
-
-### V1.2
-
-- [ ] Redesign the Mac app in the native macOS visual language: real title bar and menus, system materials, the user's accent colour, and Mac-style controls.
-
-### Later
-
-- [ ] Code signing for Windows (e.g. SignPath for open source) and macOS (Apple Developer ID + notarization)
+- **Done**
+  - Real-time audio streaming on Windows and macOS without drivers
+  - Two-way audio
+  - Quality tiers
+  - Automatic updates
+  - Five languages
+  - Aonin Pro
+- **Next**
+  - Sign in to connect your own devices without a code
+  - Android and iOS apps
+  - Native macOS design
+  - Code-signed installers
 
 ## License
 
