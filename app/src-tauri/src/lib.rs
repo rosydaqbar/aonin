@@ -439,6 +439,8 @@ pub fn run() {
         .plugin(tauri_plugin_updater::Builder::new().build())
         .setup(|app| {
             let handle = app.handle();
+            // No config yet: Aonin has never run here.
+            let first_run = config_path(handle).is_some_and(|p| !p.exists());
             let cfg = load_config(handle);
             let name = gethostname::gethostname().to_string_lossy().into_owned();
             let prefs = Prefs {
@@ -477,6 +479,13 @@ pub fn run() {
             // A tray app: no Dock icon on macOS.
             #[cfg(target_os = "macos")]
             app.set_activation_policy(tauri::ActivationPolicy::Accessory);
+            // The first time, show the window so Aonin doesn't vanish into
+            // the tray. After that it starts quietly.
+            if first_run && let Some(win) = handle.get_webview_window(MAIN) {
+                let _ = win.center();
+                let _ = win.show();
+                let _ = win.set_focus();
+            }
             Ok(())
         })
         .on_window_event(|window, event| match event {
